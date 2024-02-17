@@ -20,7 +20,6 @@ I graduated from Chiang Mai University as a geological science major. However, a
 Over five years as a developer in web development industries, My favorite industries are ERP and Finance. I think I can do a back-end side better than a front-end side.
 Now, I'm learning basic data structures and algorithms because I realized I can't solve almost all problems in leetcode by myself. So, I think it's time to learn computer science concepts.
 
-</br>
 
 **Talking about Personal Stuffs:**
 
@@ -29,7 +28,6 @@ Now, I'm learning basic data structures and algorithms because I realized I can'
 - 💬 &nbsp; Ask me about anything, I am happy to help ถามผมได้ เต็มใจช่วย
 - 📫 &nbsp; How to reach me: Facebook, Instagram, Line, `samurai.hanso@gmail.com` ติดต่อมาเล๊ยยยย
 
-</br>
 
 🗣️ **Motto:**
 <!--START_SECTION:waka-->
