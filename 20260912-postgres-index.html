@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>PostgreSQL เจาะลึก: EXPLAIN • Index • Paging • Query Patterns</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b1220; --panel:#111a2e; --panel2:#0f1729; --border:#1f2b45;
+  --text:#e2e8f0; --muted:#94a3b8; --blue:#38bdf8; --pg:#336791;
+  --yellow:#facc15; --green:#22c55e; --red:#f87171; --orange:#fb923c; --purple:#a78bfa;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:linear-gradient(180deg,#0b1220,#0a0f1c);color:var(--text);font-family:'Sarabun',sans-serif;line-height:1.7;}
+code,pre{font-family:'JetBrains Mono',monospace;}
+header{padding:28px 20px;text-align:center;border-bottom:1px solid var(--border);background:radial-gradient(ellipse at top,#16213f,transparent);}
+header h1{margin:0 0 6px;font-size:1.8rem;background:linear-gradient(90deg,#38bdf8,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent;}
+header p{color:var(--muted);margin:0;font-size:.95rem;}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:16px;position:sticky;top:0;background:#0b1220ee;backdrop-filter:blur(6px);z-index:10;border-bottom:1px solid var(--border);}
+.tab-btn{background:var(--panel);border:1px solid var(--border);color:var(--muted);padding:10px 16px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:.9rem;font-weight:600;transition:.2s;}
+.tab-btn:hover{color:var(--text);border-color:var(--blue);}
+.tab-btn.active{background:linear-gradient(135deg,var(--pg),#1d3a5f);color:#fff;border-color:var(--blue);}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 80px;}
+.tab-content{display:none;animation:fadeIn .4s ease;}
+.tab-content.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+h2.section-title{font-size:1.4rem;color:#fff;border-left:4px solid var(--blue);padding-left:12px;margin:32px 0 8px;}
+h2.section-title:first-child{margin-top:0;}
+.lead{color:var(--muted);margin-bottom:20px;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin:16px 0;}
+.card h3{margin-top:0;color:#fff;font-size:1.1rem;display:flex;align-items:center;gap:8px;}
+.card h4{margin:0 0 4px;color:var(--blue);}
+.badge{display:inline-block;font-size:.7rem;padding:2px 8px;border-radius:20px;background:#1e293b;color:var(--muted);}
+.desc{color:#cbd5e1;font-size:.92rem;margin:6px 0 12px;}
+.stage{display:flex;flex-wrap:wrap;gap:6px;min-height:56px;padding:12px;background:var(--panel2);border-radius:10px;margin:10px 0;border:1px dashed var(--border);}
+.box{width:30px;height:30px;border-radius:7px;background:#1e293b;border:1px solid #2a3a5c;display:flex;align-items:center;justify-content:center;font-size:9px;color:#64748b;transition:all .3s ease;flex-shrink:0;}
+.box.hit{background:var(--yellow);color:#0b1220;box-shadow:0 0 10px rgba(250,204,21,.6);transform:scale(1.12);}
+.box.hit2{background:var(--green);color:#04140a;box-shadow:0 0 10px rgba(34,197,94,.6);transform:scale(1.05);}
+.box.hitskip{background:var(--blue);color:#04202b;box-shadow:0 0 12px rgba(56,189,248,.7);transform:scale(1.15);}
+.box.discarded{background:#3f3f46;color:#71717a;opacity:.45;}
+.box.kept{background:var(--green);color:#04140a;box-shadow:0 0 8px rgba(34,197,94,.5);}
+.box.match{background:var(--green);color:#04140a;}
+.box.nomatch{background:#7f1d1d;color:#fca5a5;opacity:.6;}
+.box.fade{opacity:.25;}
+.play-btn{background:linear-gradient(135deg,#0ea5e9,#6366f1);border:none;color:#fff;padding:9px 18px;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:600;font-size:.88rem;margin:6px 6px 0 0;}
+.play-btn:hover{filter:brightness(1.15);}
+.play-btn.alt{background:linear-gradient(135deg,#f97316,#dc2626);}
+.play-btn.ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
+pre.plan{background:#060b16;border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:.8rem;color:#a5f3fc;overflow-x:auto;margin:8px 0;}
+pre.plan .c1{color:var(--yellow);} pre.plan .c2{color:var(--red);} pre.plan .c3{color:var(--green);}
+code.inline{background:#1e293b;padding:2px 6px;border-radius:4px;color:#93c5fd;font-size:.85em;}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.88rem;}
+th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;}
+th{background:#16213f;color:#fff;}
+tr:nth-child(even){background:#0d1526;}
+.flag-list{list-style:none;padding:0;margin:0;}
+.flag-list li{padding:8px 12px;border-left:3px solid var(--red);background:#1a0f14;margin-bottom:8px;border-radius:0 8px 8px 0;font-size:.9rem;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:760px){.grid2{grid-template-columns:1fr;}}
+.qa-pair{border-radius:14px;overflow:hidden;border:1px solid var(--border);margin:20px 0;}
+.qa-head{background:#16213f;padding:10px 16px;font-weight:700;color:#fff;font-size:.95rem;}
+.qa-bad,.qa-good{padding:14px 16px;}
+.qa-bad{background:#1a0f14;border-left:4px solid var(--red);}
+.qa-good{background:#0f1a12;border-left:4px solid var(--green);}
+.qa-bad pre,.qa-good pre{background:#060b16;border-radius:8px;padding:10px;font-size:.82rem;overflow-x:auto;margin:6px 0;}
+.qa-tag{font-size:.75rem;font-weight:700;letter-spacing:.5px;}
+.qa-bad .qa-tag{color:var(--red);} .qa-good .qa-tag{color:var(--green);}
+.why{color:var(--muted);font-size:.85rem;margin-top:6px;}
+.tree{display:flex;flex-direction:column;align-items:center;gap:14px;margin:14px 0;}
+.tree-row{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;}
+.node{min-width:52px;padding:8px 10px;border-radius:8px;background:#1e293b;border:1px solid #334155;text-align:center;font-size:.78rem;color:#94a3b8;transition:.3s;}
+.node.hit{background:var(--blue);color:#04202b;box-shadow:0 0 12px rgba(56,189,248,.7);transform:scale(1.08);}
+.node.heapbox{background:#1e293b;}
+.slider-wrap{margin:12px 0;}
+input[type=range]{width:100%;}
+.bucket-row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0;}
+.bucket{flex:1;min-width:90px;background:#0d1526;border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;transition:.3s;}
+.bucket.flash{border-color:var(--yellow);box-shadow:0 0 12px rgba(250,204,21,.4);}
+.bucket .cnt{font-size:1.3rem;font-weight:700;color:#fff;}
+.chip{width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;margin:3px;color:#04140a;}
+.mono{font-family:'JetBrains Mono',monospace;}
+.merge-arr{display:flex;gap:6px;position:relative;padding-bottom:26px;}
+.ptr{position:absolute;bottom:0;font-size:1rem;color:var(--blue);transition:left .5s ease;}
+footer{text-align:center;color:var(--muted);font-size:.8rem;padding:30px;border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🐘 PostgreSQL เจาะลึกแบบเห็นภาพ</h1>
+  <p>EXPLAIN ANALYZE • Index Algorithms • Paging & Advanced Scan • Query ดี vs แย่</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="explain">1️⃣ EXPLAIN ANALYZE</button>
+  <button class="tab-btn" data-tab="index">2️⃣ Index Algorithms</button>
+  <button class="tab-btn" data-tab="paging">3️⃣ Paging & Scan ขั้นสูง</button>
+  <button class="tab-btn" data-tab="queries">4️⃣ Query ดี vs แย่</button>
+</div>
+
+<main>
+
+<!-- ================= SECTION 1: EXPLAIN ANALYZE ================= -->
+<section id="explain" class="tab-content active">
+  <h2 class="section-title">EXPLAIN ANALYZE คืออะไร และอ่านยังไง</h2>
+  <p class="lead">EXPLAIN แสดง "แผนการทำงาน" ที่ Planner เลือก ส่วน ANALYZE จะรัน query จริงแล้ววัดเวลา/จำนวนแถวจริงมาเทียบกับที่ประมาณการไว้</p>
+
+  <div class="card">
+    <h3>🔎 วิธีอ่านตัวเลขในแต่ละบรรทัด</h3>
+    <pre class="plan">Seq Scan on orders  <span class="c1">(cost=0.00..2181.00 rows=100000 width=97)</span> <span class="c3">(actual time=0.010..15.234 rows=100000 loops=1)</span>
+  Filter: (status = 'paid'::text)
+  Rows Removed by Filter: 5000
+  <span class="c2">Buffers: shared hit=1081 read=320</span>
+Planning Time: 0.120 ms
+Execution Time: 16.502 ms</pre>
+    <table>
+      <tr><th>ส่วน</th><th>ความหมาย</th></tr>
+      <tr><td><b>cost=0.00..2181.00</b></td><td>ต้นทุนโดยประมาณ (startup..total) หน่วยไม่ใช่เวลา แต่เป็นหน่วยเปรียบเทียบ</td></tr>
+      <tr><td><b>rows=100000</b> (สีเหลือง)</td><td>จำนวนแถวที่ <b>คาดการณ์</b> จาก statistics</td></tr>
+      <tr><td><b>actual rows=100000</b> (สีเขียว)</td><td>จำนวนแถวที่ <b>เกิดขึ้นจริง</b> — ถ้าต่างจากค่าประมาณมาก แปลว่า statistics ล้าสมัย ควร <code class="inline">ANALYZE</code> ตาราง</td></tr>
+      <tr><td><b>loops=1</b></td><td>node นี้ถูกเรียกกี่รอบ (สำคัญมากใน Nested Loop — ต้องคูณ actual time ด้วย loops)</td></tr>
+      <tr><td><b>Buffers: hit / read</b> (สีแดง)</td><td>hit = เจอใน cache แล้ว, read = ต้องอ่านจาก disk — read เยอะ = cache ไม่พอ</td></tr>
+      <tr><td><b>Rows Removed by Filter</b></td><td>อ่านมาแล้วทิ้งเพราะไม่ตรงเงื่อนไข — ถ้าเยอะมาก บ่งบอกว่าควรมี index ช่วยกรองตั้งแต่ต้น</td></tr>
+    </table>
+    <div class="desc">💡 คำสั่งแนะนำที่ควรใช้เสมอ: <code class="inline">EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) SELECT ...</code></div>
+  </div>
+
+  <h2 class="section-title" style="margin-top:40px;">ชนิดของ Scan Node (คลิกเล่นอนิเมชัน)</h2>
+
+  <div class="card">
+    <h3>🟨 Seq Scan (Sequential Scan)</h3>
+    <p class="desc">อ่านทุกหน้าของตารางเรียงตามลำดับกายภาพ ตั้งแต่ต้นจนจบ เหมาะกับตารางเล็ก หรือ query ที่ต้องอ่านเกือบทั้งตารางอยู่แล้ว</p>
+    <div class="stage" id="stage-seq"></div>
+    <button class="play-btn" onclick="playSeq()">▶ เล่นอนิเมชัน</button>
+    <pre class="plan">Seq Scan on orders  (cost=0.00..2181.00 rows=100000 ..) (actual rows=100000 loops=1)</pre>
+  </div>
+
+  <div class="card">
+    <h3>🟦 Index Scan</h3>
+    <p class="desc">เดินลง B-tree จาก root → branch → leaf เพื่อหาตำแหน่งแถว แล้ว "กระโดด" (random I/O) เข้าไปอ่านข้อมูลจริงที่ heap ทีละแถว</p>
+    <div class="tree">
+      <div class="tree-row"><div class="node" id="ix-root">ROOT</div></div>
+      <div class="tree-row"><div class="node" id="ix-b1">Branch L</div><div class="node" id="ix-b2">Branch R</div></div>
+      <div class="tree-row"><div class="node" id="ix-l1">Leaf</div><div class="node" id="ix-l2">Leaf ★</div><div class="node" id="ix-l3">Leaf</div><div class="node" id="ix-l4">Leaf</div></div>
+    </div>
+    <p class="desc" style="margin-top:0;">⬇ จากนั้นกระโดดเข้า Heap (สุ่มตำแหน่ง ไม่เรียงลำดับ)</p>
+    <div class="stage" id="stage-ixheap"></div>
+    <button class="play-btn" onclick="playIndexScan()">▶ เล่นอนิเมชัน</button>
+    <pre class="plan">Index Scan using orders_id_idx on orders  (cost=0.42..8.44 rows=1) (actual rows=1 loops=1)
+  Index Cond: (id = 42)</pre>
+  </div>
+
+  <div class="card">
+    <h3>🟩 Index Only Scan</h3>
+    <p class="desc">เหมือน Index Scan แต่ <b>ไม่ต้องเข้า heap เลย</b> เพราะข้อมูลที่ต้องการมีครบใน index อยู่แล้ว (covering index) และ Visibility Map บอกว่าแถวนั้น "all-visible"</p>
+    <div class="tree">
+      <div class="tree-row"><div class="node" id="io-root">ROOT</div></div>
+      <div class="tree-row"><div class="node" id="io-b1">Branch</div><div class="node" id="io-b2">Branch</div></div>
+      <div class="tree-row"><div class="node" id="io-l1">Leaf</div><div class="node" id="io-l2">Leaf ★</div><div class="node" id="io-l3">Leaf</div></div>
+    </div>
+    <div class="stage" style="justify-content:center;"><div class="box" id="io-heap" style="width:auto;padding:10px 16px;">Heap: ❌ ไม่ถูกแตะเลย</div></div>
+    <button class="play-btn" onclick="playIndexOnly()">▶ เล่นอนิเมชัน</button>
+    <pre class="plan">Index Only Scan using orders_id_idx on orders (cost=0.42..4.44 rows=1) (actual rows=1 loops=1)
+  Heap Fetches: 0   <span class="c3">← ยิ่งเลขนี้เป็น 0 ยิ่งดี</span></pre>
+  </div>
+
+  <div class="card">
+    <h3>🟧 Bitmap Heap Scan / Bitmap Index Scan</h3>
+    <p class="desc">2 เฟส: (1) เดิน index สร้าง "bitmap" ของตำแหน่งที่ตรงเงื่อนไขทั้งหมดก่อน (2) เรียง bitmap ตามลำดับกายภาพแล้วค่อยไปอ่าน heap — ลด random I/O เมื่อ match หลายแถว</p>
+    <div class="desc" style="margin:4px 0;">เฟส 1 — สร้าง Bitmap จาก Index (สุ่มลำดับ):</div>
+    <div class="stage" id="stage-bm-a"></div>
+    <div class="desc" style="margin:4px 0;">เฟส 2 — อ่าน Heap ตามลำดับกายภาพ (เรียงแล้ว เร็วกว่า):</div>
+    <div class="stage" id="stage-bm-b"></div>
+    <button class="play-btn" onclick="playBitmap()">▶ เล่นอนิเมชัน</button>
+    <pre class="plan">Bitmap Heap Scan on orders  (cost=12.5..456.2 rows=800)
+  Recheck Cond: (customer_id = 88)
+  ->  Bitmap Index Scan on orders_customer_idx  (cost=0.00..12.3 rows=800)</pre>
+  </div>
+
+  <div class="card">
+    <h3>🔁 Nested Loop Join</h3>
+    <p class="desc">สำหรับแต่ละแถวใน outer table จะ "loop" ไปหาแถวที่ match ใน inner table — เหมาะกับข้อมูลจำนวนน้อย/มี index ฝั่ง inner แต่ถ้า outer เยอะและ inner ไม่มี index จะช้ามาก (loops คูณกันได้มหาศาล)</p>
+    <div class="grid2">
+      <div><div class="desc" style="margin:2px;">Outer: customers</div><div class="stage" id="nl-outer"></div></div>
+      <div><div class="desc" style="margin:2px;">Inner: orders (scan ซ้ำทุกรอบ)</div><div class="stage" id="nl-inner"></div></div>
+    </div>
+    <div class="desc" id="nl-counter">รอบที่ทำงาน (loops): 0</div>
+    <button class="play-btn" onclick="playNestedLoop()">▶ เล่นอนิเมชัน</button>
+    <pre class="plan">Nested Loop  (cost=0.42..1200 rows=40) (actual time=.. rows=40 loops=1)
+  ->  Seq Scan on customers  (rows=4)
+  ->  Index Scan on orders  (rows=10) <span class="c2">(loops=4)</span> ← รันซ้ำ 4 รอบ!</pre>
+  </div>
+
+  <div class="card">
+    <h3>🪣 Hash Join</h3>
+    <p class="desc">สร้าง hash table จากตารางเล็กก่อน (Build) แล้วเอาตารางใหญ่มา "probe" หา bucket เดียวกัน — เร็วกว่า Nested Loop เมื่อทั้งสองตารางใหญ่และไม่มี index ที่เหมาะ</p>
+    <div class="desc" style="margin:2px;">Build phase — ตารางเล็กตกลง bucket ตาม hash(key):</div>
+    <div class="stage" id="hj-build"></div>
+    <div class="bucket-row" id="hj-buckets">
+      <div class="bucket" data-b="0"><div>Bucket 0</div><div class="cnt">0</div></div>
+      <div class="bucket" data-b="1"><div>Bucket 1</div><div class="cnt">0</div></div>
+      <div class="bucket" data-b="2"><div>Bucket 2</div><div class="cnt">0</div></div>
+      <div class="bucket" data-b="3"><div>Bucket 3</div><div class="cnt">0</div></div>
+    </div>
+    <div class="desc" style="margin:2px;">Probe phase — ตารางใหญ่เช็ค bucket เดียวกัน:</div>
+    <div class="stage" id="hj-probe"></div>
+    <button class="play-btn" onclick="playHashJoin()">▶ เล่นอนิเมชัน</button>
+    <pre class="plan">Hash Join  (cost=45..980 rows=500)
+  Hash Cond: (o.customer_id = c.id)
+  ->  Seq Scan on orders o
+  ->  Hash  (cost=20..20 rows=200)
+        ->  Seq Scan on customers c</pre>
+  </div>
+
+  <div class="card">
+    <h3>🔀 Merge Join</h3>
+    <p class="desc">ทั้งสองฝั่งต้องเรียงลำดับอยู่แล้ว (จาก index หรือ Sort node) ใช้ 2 pointer เดินคู่ขนานเทียบค่าเรื่อยๆ — เหมาะกับข้อมูลใหญ่ที่เรียงลำดับมาแล้ว</p>
+    <div class="desc" style="margin:2px;">A (เรียงแล้ว): 1, 3, 4, 7, 9</div>
+    <div class="merge-arr" id="mj-a"></div>
+    <div class="desc" style="margin:14px 2px 2px;">B (เรียงแล้ว): 2, 3, 4, 8</div>
+    <div class="merge-arr" id="mj-b" style="margin-bottom:10px;"></div>
+    <div class="desc">ผลลัพธ์ที่ match:</div>
+    <div class="stage" id="mj-out"></div>
+    <button class="play-btn" onclick="playMergeJoin()">▶ เล่นอนิเมชัน</button>
+    <pre class="plan">Merge Join  (cost=210..340 rows=2)
+  Merge Cond: (a.id = b.id)</pre>
+  </div>
+
+  <div class="card">
+    <h3>📊 Sort — และปัญหา "spill to disk"</h3>
+    <p class="desc">ถ้าข้อมูลที่ต้อง sort ใหญ่กว่า <code class="inline">work_mem</code> Postgres จะต้องเขียนไฟล์ชั่วคราวลง disk (external merge) ซึ่งช้ากว่ามาก</p>
+    <label class="desc"><input type="checkbox" id="lowmem" onchange="renderSort()"> จำลอง work_mem ไม่พอ (ข้อมูลใหญ่)</label>
+    <div class="stage" id="stage-sort"></div>
+    <button class="play-btn" onclick="playSort()">▶ เล่นอนิเมชัน Sort</button>
+    <pre class="plan" id="sort-plan">Sort  (cost=..) (actual rows=100000 loops=1)
+  Sort Key: created_at
+  <span class="c3">Sort Method: quicksort  Memory: 25kB</span></pre>
+  </div>
+
+  <div class="card">
+    <h3>⚡ Parallel Seq Scan + Gather</h3>
+    <p class="desc">แบ่งตารางให้ worker หลายตัวช่วยกันสแกนพร้อมกัน แล้วรวมผลด้วย Gather / Gather Merge — ใช้ได้เมื่อตารางใหญ่พอและ <code class="inline">max_parallel_workers_per_gather</code> อนุญาต</p>
+    <div class="desc">Worker 0</div><div class="stage" id="pw-0"></div>
+    <div class="desc">Worker 1</div><div class="stage" id="pw-1"></div>
+    <div class="desc">Worker 2</div><div class="stage" id="pw-2"></div>
+    <button class="play-btn" onclick="playParallel()">▶ เล่นอนิเมชัน</button>
+    <pre class="plan">Gather  (cost=.. rows=100000)
+  Workers Planned: 3   Workers Launched: 3
+  ->  Parallel Seq Scan on orders  (rows=33333 loops=3)</pre>
+  </div>
+
+  <div class="card">
+    <h3>🚩 สัญญาณอันตรายที่ต้องระวังใน EXPLAIN</h3>
+    <ul class="flag-list">
+      <li>Seq Scan บนตารางที่มีแถวหลักแสน/ล้าน โดยไม่มีเหตุผล (ไม่ได้ต้องการเกือบทุกแถว)</li>
+      <li>estimated rows กับ actual rows ต่างกันหลายเท่า → statistics ล้าสมัย ต้อง <code class="inline">ANALYZE</code></li>
+      <li>Nested Loop ที่มี loops สูงมากและ inner ไม่มี index รองรับ</li>
+      <li><code class="inline">Sort Method: external merge Disk: ...</code> → ต้องเพิ่ม work_mem</li>
+      <li>Buffers read สูงกว่า hit มาก (cache miss เยอะ) เกิดขึ้นซ้ำๆ ในเวลาทำงานปกติ</li>
+      <li>Rows Removed by Filter สูงมาก → filter ทำงานหลัง scan ทั้งตาราง ควรมี index ที่ตรงเงื่อนไข</li>
+      <li>Heap Fetches มากใน Index Only Scan → ตารางมี dead tuples เยอะ ต้อง VACUUM</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= SECTION 2: INDEX ALGORITHMS ================= -->
+<section id="index" class="tab-content">
+  <h2 class="section-title">Index Algorithm แบบต่างๆ ต่างกันยังไง</h2>
+  <p class="lead">Postgres มี index หลายชนิด แต่ละแบบถูกออกแบบมาให้เหมาะกับรูปแบบข้อมูล/query ต่างกัน เลือกผิดแบบ = index มีแต่ไม่ถูกใช้ หรือใช้แล้วไม่คุ้ม</p>
+
+  <div class="card">
+    <h3>🌳 B-tree (ค่า default, ใช้บ่อยที่สุด)</h3>
+    <p class="desc">โครงสร้างต้นไม้สมดุล (balanced tree) รองรับ <code class="inline">= &lt; &gt; &lt;= &gt;= BETWEEN</code>, <code class="inline">ORDER BY</code>, <code class="inline">LIKE 'prefix%'</code> ค้นหา O(log n)</p>
+    <div class="tree">
+      <div class="tree-row"><div class="node" id="bt-root">50</div></div>
+      <div class="tree-row"><div class="node" id="bt-b1">20</div><div class="node" id="bt-b2">80</div></div>
+      <div class="tree-row"><div class="node" id="bt-l1">10,15</div><div class="node" id="bt-l2">30,42 ★</div><div class="node" id="bt-l3">60,70</div><div class="node" id="bt-l4">90,99</div></div>
+    </div>
+    <button class="play-btn" onclick="flashSteps(['bt-root','bt-b1','bt-l2'],'hit',450)">▶ ค้นหาค่า 42</button>
+  </div>
+
+  <div class="card">
+    <h3>#️⃣ Hash Index</h3>
+    <p class="desc">ใช้ hash function แปลงค่าเป็น bucket แล้วเข้าตรงจุดเลย — เร็วมากแต่รองรับ <b>เฉพาะ =</b> เท่านั้น (ไม่รองรับ range/ORDER BY) เหมาะกับ equality lookup ที่ key ยาวมากๆ</p>
+    <div class="bucket-row">
+      <div class="bucket"><div>hash('abc')</div><div class="cnt">➡️</div></div>
+      <div class="bucket" id="h-bucket"><div>Bucket 2</div><div class="cnt">🎯</div></div>
+    </div>
+    <button class="play-btn" onclick="document.getElementById('h-bucket').classList.add('flash')">▶ Lookup แบบ O(1)</button>
+  </div>
+
+  <div class="card">
+    <h3>📚 GIN (Generalized Inverted Index)</h3>
+    <p class="desc">เก็บแบบ "inverted index": 1 คีย์ → posting list ของหลายแถว เหมาะกับข้อมูลที่แต่ละแถวมีหลายค่า เช่น <code class="inline">jsonb</code>, <code class="inline">array</code>, full-text search (<code class="inline">tsvector</code>) เขียนช้ากว่าอ่านเยอะ</p>
+    <div class="desc">คำค้น "postgres" ชี้ไปยังเอกสารที่มีคำนี้:</div>
+    <div class="stage" id="gin-stage"></div>
+    <button class="play-btn" onclick="highlightSequence('gin-stage',[2,5,9,14],'hit',220)">▶ ค้นหา "postgres"</button>
+  </div>
+
+  <div class="card">
+    <h3>🗺️ GiST (Generalized Search Tree)</h3>
+    <p class="desc">ต้นไม้ที่ใช้ bounding box ครอบข้อมูล เหมาะกับข้อมูลเชิงพื้นที่ (geometry, PostGIS), full-text, exclusion constraints และ nearest-neighbor search (<code class="inline">&lt;-&gt;</code>)</p>
+    <div style="position:relative;height:110px;display:flex;align-items:center;justify-content:center;">
+      <div id="gist-r1" style="position:absolute;width:220px;height:100px;border:2px solid #334155;border-radius:10px;transition:.4s;"></div>
+      <div id="gist-r2" style="position:absolute;width:130px;height:60px;border:2px solid #334155;border-radius:10px;transition:.4s;"></div>
+      <div id="gist-r3" style="position:absolute;width:50px;height:26px;border:2px solid #334155;border-radius:6px;transition:.4s;background:#1e293b;"></div>
+    </div>
+    <button class="play-btn" onclick="flashSteps(['gist-r1','gist-r2','gist-r3'],'hit',450)">▶ ค้นหาจุดที่ตรงเงื่อนไข (ไล่จากกรอบใหญ่→เล็ก)</button>
+  </div>
+
+  <div class="card">
+    <h3>🧩 SP-GiST (Space-Partitioned GiST)</h3>
+    <p class="desc">ต้นไม้แบบไม่สมดุล แบ่งพื้นที่เป็นส่วนๆ (เช่น quad-tree/radix tree) เหมาะกับข้อมูลที่มีโครงสร้างไม่สม่ำเสมอ เช่น IP address (<code class="inline">inet</code>), เบอร์โทร, ข้อความที่มี prefix ร่วมกัน</p>
+    <div class="tree-row" style="gap:24px;">
+      <div class="node" id="sp-q1">Q1</div><div class="node" id="sp-q2">Q2 ★</div><div class="node" id="sp-q3">Q3</div><div class="node" id="sp-q4">Q4</div>
+    </div>
+    <button class="play-btn" onclick="flashSteps(['sp-q2'],'hitskip',300)">▶ กระโดดตรง quadrant ที่ใช่ (ไม่ต้อง balance ทั้งต้นไม้)</button>
+  </div>
+
+  <div class="card">
+    <h3>📦 BRIN (Block Range Index)</h3>
+    <p class="desc">เก็บแค่ min/max ของแต่ละช่วง "block" (เช่น 128 หน้า/ช่วง) เล็กมาก (เล็กกว่า B-tree หลายร้อยเท่า) เหมาะกับตารางใหญ่มากที่ข้อมูลเรียงตามธรรมชาติอยู่แล้ว เช่น <code class="inline">created_at</code> ที่ insert ตามเวลา</p>
+    <div class="desc">ค้นหา: created_at = '2024-05-10' (แถบไหน min-max ไม่ครอบคลุมจะข้ามทันที)</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      <div class="node" id="br-1">หน้า 1-1000: 01-01 → 01-15</div>
+      <div class="node" id="br-2">หน้า 1001-2000: 01-16 → 02-20</div>
+      <div class="node" id="br-3">หน้า 2001-3000: 02-21 → 04-01</div>
+      <div class="node" id="br-4">หน้า 3001-4000: 04-02 → 05-20 ★</div>
+      <div class="node" id="br-5">หน้า 4001-5000: 05-21 → 07-01</div>
+    </div>
+    <button class="play-btn" onclick="playBrin()">▶ สแกนเฉพาะช่วงที่เกี่ยวข้อง</button>
+  </div>
+
+  <div class="card">
+    <h3>📋 สรุปเปรียบเทียบ</h3>
+    <table>
+      <tr><th>Index</th><th>รองรับ Range/Sort</th><th>เหมาะกับ</th><th>ขนาด</th><th>ต้นทุนตอนเขียน</th></tr>
+      <tr><td>B-tree</td><td>✅</td><td>ทั่วไป, equality + range</td><td>กลาง</td><td>กลาง</td></tr>
+      <tr><td>Hash</td><td>❌ (= เท่านั้น)</td><td>equality lookup, key ยาว</td><td>เล็ก-กลาง</td><td>ต่ำ</td></tr>
+      <tr><td>GIN</td><td>❌</td><td>jsonb, array, full-text</td><td>ใหญ่</td><td>สูง (ใช้ fastupdate ช่วยได้)</td></tr>
+      <tr><td>GiST</td><td>บางส่วน</td><td>geometry, KNN, exclusion</td><td>กลาง-ใหญ่</td><td>กลาง</td></tr>
+      <tr><td>SP-GiST</td><td>บางส่วน</td><td>IP, phone, prefix data</td><td>เล็ก-กลาง</td><td>ต่ำ-กลาง</td></tr>
+      <tr><td>BRIN</td><td>✅ (แบบหยาบ)</td><td>ตารางใหญ่ที่ข้อมูลเรียงตามธรรมชาติ</td><td>เล็กมาก</td><td>ต่ำมาก</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ================= SECTION 3: PAGING & SCAN ================= -->
+<section id="paging" class="tab-content">
+  <h2 class="section-title">Paging และเทคนิคขั้นสูงในการ Scan</h2>
+
+  <div class="card">
+    <h3>🐌 OFFSET / LIMIT (แบบดั้งเดิม)</h3>
+    <p class="desc">ฐานข้อมูลต้อง "อ่านแล้วทิ้ง" ทุกแถวก่อนหน้า OFFSET เสมอ — ยิ่งเลขหน้ามาก ยิ่งช้าเป็นเส้นตรง (O(offset))</p>
+    <div class="slider-wrap">
+      <input type="range" id="offsetRange" min="0" max="24" value="0" oninput="updateOffset(this.value)">
+    </div>
+    <div class="stage" id="offset-stage"></div>
+    <div class="desc" id="offset-info">OFFSET 0 LIMIT 5 → อ่านและทิ้ง 0 แถวก่อนหน้า</div>
+    <pre class="plan">SELECT * FROM posts ORDER BY id LIMIT 5 OFFSET 10000;
+-- Postgres ต้องเดินผ่าน 10000 แถวแรกทุกครั้ง ก่อนจะเริ่มส่งผลลัพธ์</pre>
+  </div>
+
+  <div class="card">
+    <h3>🚀 Keyset / Seek Pagination (แนะนำ)</h3>
+    <p class="desc">ใช้ค่า cursor ล่าสุด + index กระโดดตรงจุดเดียว ไม่ว่าจะหน้าที่เท่าไหร่ก็เร็วเท่ากัน (O(log n) คงที่)</p>
+    <div class="stage" id="keyset-stage"></div>
+    <button class="play-btn" onclick="playKeyset()">▶ ไปหน้าถัดไป (ไม่ว่าหน้าไหนก็เร็วเท่ากัน)</button>
+    <pre class="plan">SELECT * FROM posts WHERE id &gt; :last_seen_id ORDER BY id LIMIT 5;
+-- ใช้ Index Cond กระโดดตรงจุด ไม่ต้องนับผ่านแถวก่อนหน้า</pre>
+  </div>
+
+  <div class="card">
+    <h3>🎯 TID Scan</h3>
+    <p class="desc">เมื่อรู้ตำแหน่งกายภาพ (ctid) ของแถวอยู่แล้ว (เช่นเก็บ bookmark ไว้) จะกระโดดตรงเข้าไปอ่านได้เลยโดยไม่ต้องผ่าน index</p>
+    <div class="stage" id="tid-stage"></div>
+    <button class="play-btn" onclick="highlightSequence('tid-stage',[11],'hit2',0)">▶ jump ด้วย ctid</button>
+    <pre class="plan">SELECT * FROM posts WHERE ctid = '(3,5)';  -- Tid Scan</pre>
+  </div>
+
+  <div class="card">
+    <h3>🆕 Index Skip Scan (PostgreSQL 18+)</h3>
+    <p class="desc">Composite index <code class="inline">(store_id, product_id)</code> เดิมถ้า query กรองแค่คอลัมน์หลัง (<code class="inline">product_id</code>) โดยไม่ระบุ <code class="inline">store_id</code> เลย ก่อน PG18 ต้องไล่อ่านทุก entry ในดัชนี ตั้งแต่ PG18 planner จะ "กระโดดข้าม" กลุ่มค่าที่ซ้ำได้</p>
+    <div class="desc">Index entries (จัดกลุ่มตาม store_id: A,A,A | B,B,B | C,C,C):</div>
+    <div class="stage" id="skip-stage"></div>
+    <button class="play-btn alt" onclick="highlightSequence('skip-stage',[0,1,2,3,4,5,6,7,8],'hit',110)">▶ ก่อน PG18: อ่านทุก entry</button>
+    <button class="play-btn" onclick="resetBoxes('skip-stage');highlightSequence('skip-stage',[0,3,6],'hitskip',400)">▶ PG18 Skip Scan: กระโดดข้ามกลุ่ม</button>
+  </div>
+
+  <div class="card">
+    <h3>🔗 Bitmap AND / OR — รวมหลาย Index เข้าด้วยกัน</h3>
+    <p class="desc">เมื่อ query มีหลายเงื่อนไขและแต่ละคอลัมน์มี index แยกกัน Planner สามารถสร้าง bitmap จากแต่ละ index แล้วนำมา AND/OR รวมกันก่อนไปอ่าน heap ครั้งเดียว</p>
+    <pre class="plan">BitmapAnd
+  ->  Bitmap Index Scan on idx_status   (cond: status='paid')
+  ->  Bitmap Index Scan on idx_customer (cond: customer_id=88)
+-- รวม bitmap 2 อันก่อนไปอ่าน heap รอบเดียว แทนที่จะ join 2 รอบ</pre>
+  </div>
+</section>
+
+<!-- ================= SECTION 4: GOOD VS BAD ================= -->
+<section id="queries" class="tab-content">
+  <h2 class="section-title">ตัวอย่าง Query แย่ vs ดี (จับคู่เทียบกัน)</h2>
+
+  <div class="qa-pair">
+    <div class="qa-head">1. SELECT คอลัมน์ทั้งหมด</div>
+    <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
+      <pre>SELECT * FROM orders WHERE id = 1;</pre>
+      <div class="why">ดึงคอลัมน์เกินจำเป็น เสีย I/O, เสีย network, และทำให้ Index Only Scan เป็นไปไม่ได้</div>
+    </div>
+    <div class="qa-good"><span class="qa-tag">✅ ดี</span>
+      <pre>SELECT id, status, total FROM orders WHERE id = 1;</pre>
+      <div class="why">ดึงเฉพาะที่ใช้จริง เปิดโอกาสให้ index ครอบคลุม (covering index) และ Index Only Scan ทำงานได้</div>
+    </div>
+  </div>
+
+  <div class="qa-pair">
+    <div class="qa-head">2. ใช้ฟังก์ชันครอบคอลัมน์ที่มี Index</div>
+    <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
+      <pre>SELECT * FROM users WHERE lower(email) = 'a@x.com';</pre>
+      <div class="why">ครอบ index column ด้วยฟังก์ชัน ทำให้ B-tree index ธรรมดาใช้ไม่ได้ (non-sargable) → กลายเป็น Seq Scan</div>
+    </div>
+    <div class="qa-good"><span class="qa-tag">✅ ดี</span>
+      <pre>-- สร้าง expression index
+CREATE INDEX ON users (lower(email));
+SELECT * FROM users WHERE lower(email) = 'a@x.com';</pre>
+      <div class="why">สร้าง index บน expression เดียวกัน → planner ใช้ Index Scan ได้ปกติ</div>
+    </div>
+  </div>
+
+  <div class="qa-pair">
+    <div class="qa-head">3. NOT IN กับค่าที่อาจมี NULL</div>
+    <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
+      <pre>SELECT * FROM a WHERE id NOT IN (SELECT id FROM b);</pre>
+      <div class="why">ถ้า subquery มีค่า NULL แม้แค่แถวเดียว ผลลัพธ์ทั้งหมดจะกลายเป็นว่างเปล่า (logic ผิดแบบเงียบๆ) และ performance แย่</div>
+    </div>
+    <div class="qa-good"><span class="qa-tag">✅ ดี</span>
+      <pre>SELECT * FROM a
+WHERE NOT EXISTS (SELECT 1 FROM b WHERE b.id = a.id);</pre>
+      <div class="why">ปลอดภัยจาก NULL, planner มักแปลงเป็น Anti Join ที่มีประสิทธิภาพดีกว่ามาก</div>
+    </div>
+  </div>
+
+  <div class="qa-pair">
+    <div class="qa-head">4. LIKE ที่ขึ้นต้นด้วย %</div>
+    <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
+      <pre>SELECT * FROM products WHERE name LIKE '%phone%';</pre>
+      <div class="why">B-tree index ใช้ไม่ได้กับ wildcard นำหน้า → ต้อง Seq Scan เต็มตาราง</div>
+    </div>
+    <div class="qa-good"><span class="qa-tag">✅ ดี</span>
+      <pre>CREATE EXTENSION pg_trgm;
+CREATE INDEX ON products USING gin (name gin_trgm_ops);
+SELECT * FROM products WHERE name LIKE '%phone%';</pre>
+      <div class="why">GIN + pg_trgm รองรับการค้นหาคำกลางข้อความได้อย่างมีประสิทธิภาพ</div>
+    </div>
+  </div>
+
+  <div class="qa-pair">
+    <div class="qa-head">5. OFFSET หน้าลึกๆ</div>
+    <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
+      <pre>SELECT * FROM posts ORDER BY id LIMIT 20 OFFSET 100000;</pre>
+      <div class="why">ต้องอ่านและทิ้ง 100,000 แถวทุกครั้ง ยิ่งหน้าลึกยิ่งช้า</div>
+    </div>
+    <div class="qa-good"><span class="qa-tag">✅ ดี</span>
+      <pre>SELECT * FROM posts
+WHERE id &gt; :last_id ORDER BY id LIMIT 20;</pre>
+      <div class="why">Keyset pagination ใช้ index seek ตรงจุด เร็วคงที่ทุกหน้า</div>
+    </div>
+  </div>
+
+  <div class="qa-pair">
+    <div class="qa-head">6. N+1 Query (loop query ใน application)</div>
+    <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
+      <pre>-- ใน loop ของแอป
+SELECT * FROM comments WHERE post_id = ?;  -- เรียก N ครั้ง</pre>
+      <div class="why">ยิงคำสั่งไปกลับหาฐานข้อมูล N ครั้ง เสีย network round-trip มหาศาล</div>
+    </div>
+    <div class="qa-good"><span class="qa-tag">✅ ดี</span>
+      <pre>SELECT * FROM comments
+WHERE post_id = ANY($1::int[]);  -- ครั้งเดียว</pre>
+      <div class="why">ดึงข้อมูลทั้งหมดในคำสั่งเดียวแล้วจับกลุ่มฝั่งแอป ลด round-trip เหลือ 1 ครั้ง</div>
+    </div>
+  </div>
+
+  <div class="qa-pair">
+    <div class="qa-head">7. Type mismatch ทำ Index พัง</div>
+    <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
+      <pre>-- phone เป็น varchar แต่ query ส่ง int
+SELECT * FROM users WHERE phone = 0812345678;</pre>
+      <div class="why">เกิด implicit cast ทำให้ index บนคอลัมน์เดิมใช้ไม่ได้ตรงๆ</div>
+    </div>
+    <div class="qa-good"><span class="qa-tag">✅ ดี</span>
+      <pre>SELECT * FROM users WHERE phone = '0812345678';</pre>
+      <div class="why">ชนิดข้อมูลตรงกัน planner ใช้ index ได้ตามปกติ</div>
+    </div>
+  </div>
+
+  <div class="qa-pair">
+    <div class="qa-head">8. COUNT(*) แบบแม่นยำบนตารางมหาศาล</div>
+    <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
+      <pre>SELECT COUNT(*) FROM big_events;</pre>
+      <div class="why">ต้อง Seq Scan ทั้งตารางเพื่อนับแถวจริง (Postgres ไม่มี count cache แบบ MyISAM) ช้ามากถ้ามีหลักสิบล้านแถว</div>
+    </div>
+    <div class="qa-good"><span class="qa-tag">✅ ดี</span>
+      <pre>SELECT reltuples::bigint AS estimate
+FROM pg_class WHERE relname = 'big_events';</pre>
+      <div class="why">ถ้าต้องการแค่ตัวเลขโดยประมาณ (เช่นแสดงหน้าเว็บ) ใช้สถิติที่เก็บไว้แล้วเร็วกว่ามาก</div>
+    </div>
+  </div>
+
+  <div class="qa-pair">
+    <div class="qa-head">9. ลำดับคอลัมน์ใน Composite Index ผิด</div>
+    <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
+      <pre>CREATE INDEX ON orders (created_at, customer_id);
+-- แต่ query กรองด้วย customer_id อย่างเดียว
+SELECT * FROM orders WHERE customer_id = 5;</pre>
+      <div class="why">Index เรียง created_at เป็นหลัก ทำให้ filter customer_id อย่างเดียวใช้ index ได้ไม่เต็มประสิทธิภาพ</div>
+    </div>
+    <div class="qa-good"><span class="qa-tag">✅ ดี</span>
+      <pre>CREATE INDEX ON orders (customer_id, created_at);
+SELECT * FROM orders WHERE customer_id = 5
+ORDER BY created_at DESC;</pre>
+      <div class="why">คอลัมน์ที่ query ใช้กรอง equality ควรอยู่หน้าสุด ตามด้วยคอลัมน์ที่ใช้ sort/range</div>
+    </div>
+  </div>
+
+  <div class="qa-pair">
+    <div class="qa-head">10. OR หลายเงื่อนไขคนละคอลัมน์</div>
+    <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
+      <pre>SELECT * FROM orders
+WHERE customer_id = 5 OR product_id = 9;</pre>
+      <div class="why">OR ข้ามคอลัมน์มักบังคับให้ planner เลือก Seq Scan เพราะรวมผลจาก index 2 ตัวด้วย OR ตรงๆ ทำได้ไม่เสมอไป</div>
+    </div>
+    <div class="qa-good"><span class="qa-tag">✅ ดี</span>
+      <pre>SELECT * FROM orders WHERE customer_id = 5
+UNION
+SELECT * FROM orders WHERE product_id = 9;</pre>
+      <div class="why">แยกเป็น UNION ทำให้แต่ละ query ใช้ index ของตัวเองได้เต็มที่ (Postgres จัด BitmapOr ให้อัตโนมัติได้ในหลายกรณีเช่นกัน)</div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>สร้างเพื่อการเรียนรู้ PostgreSQL — ทดลองรัน EXPLAIN (ANALYZE, BUFFERS) กับ query จริงของคุณควบคู่ไปด้วยเสมอ 🐘</footer>
+
+<script>
+// ---------- Tab switching ----------
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ---------- helpers ----------
+function buildBoxGrid(id,count,label){
+  const el=document.getElementById(id);
+  el.innerHTML='';
+  for(let i=0;i<count;i++){
+    const d=document.createElement('div');
+    d.className='box';
+    d.textContent=label?label(i):i;
+    el.appendChild(d);
+  }
+}
+function resetBoxes(id){
+  document.querySelectorAll('#'+id+' .box').forEach(b=>b.className='box');
+}
+function highlightSequence(id,indices,cls,step){
+  const el=document.getElementById(id);
+  const kids=[...el.children];
+  indices.forEach((idx,i)=>{
+    setTimeout(()=>{ if(kids[idx]) kids[idx].classList.add(cls); }, i*step);
+  });
+}
+function flashSteps(ids,cls,step){
+  ids.forEach(id=>{ const e=document.getElementById(id); if(e) e.classList.remove('hit'); });
+  ids.forEach((id,i)=>{
+    setTimeout(()=>{ const e=document.getElementById(id); if(e) e.classList.add(cls||'hit'); }, i*step);
+  });
+}
+
+// ---------- init grids ----------
+buildBoxGrid('stage-seq',24,i=>'');
+buildBoxGrid('stage-ixheap',24,i=>'');
+buildBoxGrid('stage-bm-a',24,i=>'');
+buildBoxGrid('stage-bm-b',24,i=>'');
+buildBoxGrid('nl-outer',4,i=>'C'+(i+1));
+buildBoxGrid('nl-inner',3,i=>'O'+(i+1));
+buildBoxGrid('gin-stage',16,i=>'#'+i);
+buildBoxGrid('offset-stage',30,i=>i);
+buildBoxGrid('keyset-stage',30,i=>i);
+buildBoxGrid('tid-stage',16,i=>i);
+buildBoxGrid('skip-stage',9,i=>['A1','A2','A3','B1','B2','B3','C1','C2','C3'][i]);
+buildBoxGrid('pw-0',10,()=>'');
+buildBoxGrid('pw-1',10,()=>'');
+buildBoxGrid('pw-2',10,()=>'');
+
+// ---------- Section 1 demos ----------
+function playSeq(){
+  resetBoxes('stage-seq');
+  highlightSequence('stage-seq',[...Array(24).keys()],'hit2',60);
+}
+function playIndexScan(){
+  ['ix-root','ix-b1','ix-b2','ix-l1','ix-l2','ix-l3','ix-l4'].forEach(id=>document.getElementById(id).classList.remove('hit'));
+  flashSteps(['ix-root','ix-b1','ix-l2'],'hit',400);
+  resetBoxes('stage-ixheap');
+  setTimeout(()=>{ highlightSequence('stage-ixheap',[3,14,7,20,11],'hit2',180); }, 1300);
+}
+function playIndexOnly(){
+  ['io-root','io-b1','io-b2','io-l1','io-l2','io-l3'].forEach(id=>document.getElementById(id).classList.remove('hit'));
+  flashSteps(['io-root','io-b1','io-l2'],'hit',400);
+  const h=document.getElementById('io-heap');
+  h.style.borderColor='#22c55e'; h.style.color='#22c55e';
+}
+function playBitmap(){
+  const idxs=[2,7,9,15,20];
+  resetBoxes('stage-bm-a'); resetBoxes('stage-bm-b');
+  const shuffled=[...idxs].sort(()=>Math.random()-0.5);
+  const kidsA=[...document.getElementById('stage-bm-a').children];
+  shuffled.forEach((idx,i)=>setTimeout(()=>kidsA[idx].classList.add('hit'), i*220));
+  const kidsB=[...document.getElementById('stage-bm-b').children];
+  const sorted=[...idxs].sort((a,b)=>a-b);
+  setTimeout(()=>{
+    sorted.forEach((idx,i)=>setTimeout(()=>kidsB[idx].classList.add('hit2'), i*220));
+  }, shuffled.length*220+400);
+}
+function playNestedLoop(){
+  const outer=[...document.querySelectorAll('#nl-outer .box')];
+  const inner=[...document.querySelectorAll('#nl-inner .box')];
+  outer.forEach(o=>o.className='box'); inner.forEach(o=>o.className='box');
+  let loops=0, delay=0;
+  outer.forEach((o)=>{
+    setTimeout(()=>{ outer.forEach(x=>x.classList.remove('hit')); o.classList.add('hit'); },delay);
+    delay+=500;
+    inner.forEach((iEl)=>{
+      setTimeout(()=>{
+        inner.forEach(x=>x.classList.remove('hit2'));
+        iEl.classList.add('hit2');
+        loops++;
+        document.getElementById('nl-counter').textContent='รอบที่ทำงาน (loops): '+loops;
+      },delay);
+      delay+=280;
+    });
+  });
+}
+const hjBucketMap=[2,0,3,1,2,0];
+function initHashJoin(){
+  const build=document.getElementById('hj-build'); build.innerHTML='';
+  hjBucketMap.forEach((b,i)=>{
+    const d=document.createElement('div'); d.className='box'; d.textContent='r'+i; d.dataset.bucket=b;
+    build.appendChild(d);
+  });
+  const probe=document.getElementById('hj-probe'); probe.innerHTML='';
+  [1,0,3,2,1].forEach((b,i)=>{
+    const d=document.createElement('div'); d.className='box'; d.textContent='p'+i; d.dataset.bucket=b;
+    probe.appendChild(d);
+  });
+}
+initHashJoin();
+function playHashJoin(){
+  document.querySelectorAll('.bucket').forEach(b=>{b.classList.remove('flash'); b.querySelector('.cnt').textContent='0';});
+  const counts=[0,0,0,0];
+  const buildBoxes=[...document.querySelectorAll('#hj-build .box')];
+  buildBoxes.forEach(b=>b.className='box');
+  buildBoxes.forEach((b,i)=>{
+    setTimeout(()=>{
+      const bucket=Number(b.dataset.bucket);
+      b.classList.add('hit');
+      counts[bucket]++;
+      const bEl=document.querySelector('.bucket[data-b="'+bucket+'"]');
+      bEl.classList.add('flash');
+      bEl.querySelector('.cnt').textContent=counts[bucket];
+    }, i*350);
+  });
+  const probeBoxes=[...document.querySelectorAll('#hj-probe .box')];
+  probeBoxes.forEach(b=>b.className='box');
+  const startProbe=buildBoxes.length*350+500;
+  probeBoxes.forEach((b,i)=>{
+    setTimeout(()=>{
+      const bucket=Number(b.dataset.bucket);
+      const match=counts[bucket]>0;
+      b.classList.add(match?'match':'nomatch');
+    }, startProbe+i*350);
+  });
+}
+const mjA=[1,3,4,7,9], mjB=[2,3,4,8];
+function initMerge(){
+  const a=document.getElementById('mj-a'); a.innerHTML='';
+  mjA.forEach(v=>{ const d=document.createElement('div'); d.className='box'; d.textContent=v; a.appendChild(d); });
+  const pa=document.createElement('div'); pa.className='ptr'; pa.id='ptrA'; pa.textContent='▲'; pa.style.left='0px'; a.appendChild(pa);
+  const b=document.getElementById('mj-b'); b.innerHTML='';
+  mjB.forEach(v=>{ const d=document.createElement('div'); d.className='box'; d.textContent=v; b.appendChild(d); });
+  const pb=document.createElement('div'); pb.className='ptr'; pb.id='ptrB'; pb.textContent='▲'; pb.style.left='0px'; b.appendChild(pb);
+}
+initMerge();
+function playMergeJoin(){
+  document.getElementById('mj-out').innerHTML='';
+  let i=0,j=0, delay=0;
+  const step=700;
+  function moveP(id,idx){ document.getElementById(id).style.left=(idx*36)+'px'; }
+  moveP('ptrA',0); moveP('ptrB',0);
+  const timeline=[];
+  let ii=0, jj=0;
+  while(ii<mjA.length && jj<mjB.length){
+    if(mjA[ii]<mjB[jj]){ timeline.push({type:'a',ii,jj}); ii++; }
+    else if(mjA[ii]>mjB[jj]){ timeline.push({type:'b',ii,jj}); jj++; }
+    else { timeline.push({type:'match',ii,jj}); ii++; jj++; }
+  }
+  timeline.forEach((t)=>{
+    setTimeout(()=>{
+      moveP('ptrA',t.ii); moveP('ptrB',t.jj);
+      if(t.type==='match'){
+        const out=document.getElementById('mj-out');
+        const d=document.createElement('div'); d.className='box hit2'; d.textContent=mjA[t.ii];
+        out.appendChild(d);
+      }
+    }, delay);
+    delay+=step;
+  });
+}
+function renderSort(){
+  const low=document.getElementById('lowmem').checked;
+  document.getElementById('sort-plan').innerHTML = low
+    ? 'Sort  (cost=..) (actual rows=2000000 loops=1)\n  Sort Key: created_at\n  <span class="c2">Sort Method: external merge  Disk: 45120kB</span>  ← work_mem ไม่พอ ต้อง spill ลง disk!'
+    : 'Sort  (cost=..) (actual rows=100000 loops=1)\n  Sort Key: created_at\n  <span class="c3">Sort Method: quicksort  Memory: 25kB</span>';
+}
+renderSort();
+function playSort(){
+  buildBoxGrid('stage-sort',16,()=>Math.floor(Math.random()*90)+10);
+  const boxes=[...document.querySelectorAll('#stage-sort .box')];
+  boxes.forEach((b,i)=>{ b.style.height=(Number(b.textContent)+10)+'px'; b.textContent=''; });
+  setTimeout(()=>{
+    const vals=boxes.map(b=>parseInt(b.style.height)).sort((a,b)=>a-b);
+    boxes.forEach((b,i)=>{ b.style.height=vals[i]+'px'; b.classList.add('hit2'); });
+  },400);
+}
+function playParallel(){
+  ['pw-0','pw-1','pw-2'].forEach(id=>{
+    resetBoxes(id);
+    highlightSequence(id,[...Array(10).keys()],'hit2',70);
+  });
+}
+
+// ---------- Section 2 demos ----------
+function playBrin(){
+  ['br-1','br-2','br-3','br-4','br-5'].forEach(id=>document.getElementById(id).className='node');
+  ['br-1','br-2','br-3','br-5'].forEach(id=>document.getElementById(id).classList.add('fade'));
+  setTimeout(()=>document.getElementById('br-4').classList.add('hit'), 400);
+}
+
+// ---------- Section 3 demos ----------
+function updateOffset(v){
+  const boxes=[...document.querySelectorAll('#offset-stage .box')];
+  boxes.forEach((b,i)=>{
+    b.className='box';
+    if(i<Number(v)) b.classList.add('discarded');
+    else if(i<Number(v)+5) b.classList.add('kept');
+  });
+  document.getElementById('offset-info').textContent =
+    `OFFSET ${v} LIMIT 5 → ฐานข้อมูลต้องอ่าน (และทิ้ง) ${v} แถวก่อนถึงหน้านี้ทุกครั้ง (ยิ่งเลขหน้ามาก ยิ่งช้า)`;
+}
+updateOffset(0);
+let keysetPage=0;
+function playKeyset(){
+  resetBoxes('keyset-stage');
+  const start=keysetPage*5;
+  highlightSequence('keyset-stage',[start],'hitskip',0);
+  setTimeout(()=>{
+    for(let i=start;i<start+5 && i<30;i++){
+      document.querySelectorAll('#keyset-stage .box')[i].classList.add('kept');
+    }
+  },250);
+  keysetPage=(keysetPage+1)%6;
+}
+</script>
+</body>
+</html>
