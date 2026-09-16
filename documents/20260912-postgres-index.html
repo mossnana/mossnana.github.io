@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<title>PostgreSQL เจาะลึก: EXPLAIN • Index • Paging • Query Patterns</title>
+<title>PostgreSQL เจาะลึก: EXPLAIN • Index • Database Pages • Query Patterns</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -34,12 +34,12 @@ h2.section-title:first-child{margin-top:0;}
 .card h4{margin:0 0 4px;color:var(--blue);}
 .badge{display:inline-block;font-size:.7rem;padding:2px 8px;border-radius:20px;background:#1e293b;color:var(--muted);}
 .desc{color:#cbd5e1;font-size:.92rem;margin:6px 0 12px;}
-.stage{display:flex;flex-wrap:wrap;gap:6px;min-height:56px;padding:12px;background:var(--panel2);border-radius:10px;margin:10px 0;border:1px dashed var(--border);}
-.box{width:30px;height:30px;border-radius:7px;background:#1e293b;border:1px solid #2a3a5c;display:flex;align-items:center;justify-content:center;font-size:9px;color:#64748b;transition:all .3s ease;flex-shrink:0;}
+.stage{display:flex;flex-wrap:wrap;gap:6px;min-height:56px;padding:12px;background:var(--panel2);border-radius:10px;margin:10px 0;border:1px dashed var(--border);align-items:center;}
+.box{width:30px;height:30px;border-radius:7px;background:#1e293b;border:1px solid #2a3a5c;display:flex;align-items:center;justify-content:center;font-size:9px;color:#64748b;transition:all .3s ease;flex-shrink:0;text-align:center;}
 .box.hit{background:var(--yellow);color:#0b1220;box-shadow:0 0 10px rgba(250,204,21,.6);transform:scale(1.12);}
 .box.hit2{background:var(--green);color:#04140a;box-shadow:0 0 10px rgba(34,197,94,.6);transform:scale(1.05);}
 .box.hitskip{background:var(--blue);color:#04202b;box-shadow:0 0 12px rgba(56,189,248,.7);transform:scale(1.15);}
-.box.discarded{background:#3f3f46;color:#71717a;opacity:.45;}
+.box.discarded{background:#3f3f46;color:#a1a1aa;opacity:.7;}
 .box.kept{background:var(--green);color:#04140a;box-shadow:0 0 8px rgba(34,197,94,.5);}
 .box.match{background:var(--green);color:#04140a;}
 .box.nomatch{background:#7f1d1d;color:#fca5a5;opacity:.6;}
@@ -78,25 +78,33 @@ input[type=range]{width:100%;}
 .bucket-row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0;}
 .bucket{flex:1;min-width:90px;background:#0d1526;border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;transition:.3s;}
 .bucket.flash{border-color:var(--yellow);box-shadow:0 0 12px rgba(250,204,21,.4);}
-.bucket .cnt{font-size:1.3rem;font-weight:700;color:#fff;}
+.bucket .cnt{font-size:1.1rem;font-weight:700;color:#fff;}
 .chip{width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;margin:3px;color:#04140a;}
 .mono{font-family:'JetBrains Mono',monospace;}
 .merge-arr{display:flex;gap:6px;position:relative;padding-bottom:26px;}
 .ptr{position:absolute;bottom:0;font-size:1rem;color:var(--blue);transition:left .5s ease;}
 footer{text-align:center;color:var(--muted);font-size:.8rem;padding:30px;border-top:1px solid var(--border);}
+
+/* --- Section 3: Database Page styles --- */
+.pagebar{display:flex;height:70px;border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.seg{display:flex;align-items:center;justify-content:center;font-size:.68rem;color:#0b1220;transition:width .45s ease,background .3s ease;white-space:nowrap;overflow:hidden;height:100%;}
+.seg-header{background:#64748b;color:#fff;width:8%;flex:none;}
+.seg-lp{background:var(--purple);width:0%;flex:none;}
+.seg-free{background:#1e293b;color:var(--muted);width:92%;flex:none;}
+.seg-tuple{background:var(--green);width:0%;flex:none;}
 </style>
 </head>
 <body>
 
 <header>
   <h1>🐘 PostgreSQL เจาะลึกแบบเห็นภาพ</h1>
-  <p>EXPLAIN ANALYZE • Index Algorithms • Paging & Advanced Scan • Query ดี vs แย่</p>
+  <p>EXPLAIN ANALYZE • Index Algorithms • Database Pages & Row Scanning • Query ดี vs แย่</p>
 </header>
 
 <div class="tabs">
   <button class="tab-btn active" data-tab="explain">1️⃣ EXPLAIN ANALYZE</button>
   <button class="tab-btn" data-tab="index">2️⃣ Index Algorithms</button>
-  <button class="tab-btn" data-tab="paging">3️⃣ Paging & Scan ขั้นสูง</button>
+  <button class="tab-btn" data-tab="paging">3️⃣ Database Pages & Scan</button>
   <button class="tab-btn" data-tab="queries">4️⃣ Query ดี vs แย่</button>
 </div>
 
@@ -347,55 +355,89 @@ Execution Time: 16.502 ms</pre>
   </div>
 </section>
 
-<!-- ================= SECTION 3: PAGING & SCAN ================= -->
+<!-- ================= SECTION 3: DATABASE PAGES ================= -->
 <section id="paging" class="tab-content">
-  <h2 class="section-title">Paging และเทคนิคขั้นสูงในการ Scan</h2>
+  <h2 class="section-title">กลไก Database Page: ที่เก็บข้อมูลจริงเพื่อ Scan แถว</h2>
+  <p class="lead">Postgres ไม่ได้เก็บข้อมูลเป็น "แถว" ลอยๆ แต่เก็บเป็นไฟล์แบ่งเป็นหน้า (page) ขนาดคงที่ 8KB เรียงต่อกัน ทุกการ Scan ไม่ว่าจะ Seq Scan หรือ Index Scan สุดท้ายต้องอ่านผ่านหน้าเหล่านี้เสมอ</p>
 
   <div class="card">
-    <h3>🐌 OFFSET / LIMIT (แบบดั้งเดิม)</h3>
-    <p class="desc">ฐานข้อมูลต้อง "อ่านแล้วทิ้ง" ทุกแถวก่อนหน้า OFFSET เสมอ — ยิ่งเลขหน้ามาก ยิ่งช้าเป็นเส้นตรง (O(offset))</p>
-    <div class="slider-wrap">
-      <input type="range" id="offsetRange" min="0" max="24" value="0" oninput="updateOffset(this.value)">
+    <h3>📄 โครงสร้างภายในของ 1 Page (8KB)</h3>
+    <p class="desc">แต่ละหน้าแบ่งเป็น 4 ส่วน: <b>Page Header</b> (metadata) → <b>Line Pointer Array</b> (ที่อยู่ของแต่ละแถว เติบโตจากบนลงล่าง) → <b>Free Space</b> (พื้นที่ว่างตรงกลาง) → <b>Tuple Data</b> (ข้อมูลแถวจริง เติบโตจากล่างขึ้นบน)</p>
+    <div class="pagebar" id="pagebar">
+      <div class="seg seg-header">Header</div>
+      <div class="seg seg-lp" id="seg-lp"></div>
+      <div class="seg seg-free" id="seg-free">Free Space</div>
+      <div class="seg seg-tuple" id="seg-tuple"></div>
     </div>
-    <div class="stage" id="offset-stage"></div>
-    <div class="desc" id="offset-info">OFFSET 0 LIMIT 5 → อ่านและทิ้ง 0 แถวก่อนหน้า</div>
-    <pre class="plan">SELECT * FROM posts ORDER BY id LIMIT 5 OFFSET 10000;
--- Postgres ต้องเดินผ่าน 10000 แถวแรกทุกครั้ง ก่อนจะเริ่มส่งผลลัพธ์</pre>
+    <div class="desc" id="page-info">0 แถวในหน้านี้</div>
+    <button class="play-btn" onclick="addTupleToPage()">➕ INSERT แถวใหม่</button>
+    <button class="play-btn ghost" onclick="resetPage()">↺ รีเซ็ต Page</button>
+    <pre class="plan">-- แต่ละแถวมี "line pointer" (item id) ชี้ไปตำแหน่ง offset ของ tuple จริงในหน้าเดียวกัน
+-- เมื่อ Free Space หมด → Postgres ต้องเปิด page ใหม่มาเก็บแถวถัดไป (นี่คือเหตุผลที่ตารางโตเป็นไฟล์หลาย page)</pre>
   </div>
 
   <div class="card">
-    <h3>🚀 Keyset / Seek Pagination (แนะนำ)</h3>
-    <p class="desc">ใช้ค่า cursor ล่าสุด + index กระโดดตรงจุดเดียว ไม่ว่าจะหน้าที่เท่าไหร่ก็เร็วเท่ากัน (O(log n) คงที่)</p>
-    <div class="stage" id="keyset-stage"></div>
-    <button class="play-btn" onclick="playKeyset()">▶ ไปหน้าถัดไป (ไม่ว่าหน้าไหนก็เร็วเท่ากัน)</button>
-    <pre class="plan">SELECT * FROM posts WHERE id &gt; :last_seen_id ORDER BY id LIMIT 5;
--- ใช้ Index Cond กระโดดตรงจุด ไม่ต้องนับผ่านแถวก่อนหน้า</pre>
+    <h3>🧬 Tuple Header กับ MVCC (xmin / xmax)</h3>
+    <p class="desc">ทุก tuple มี header เก็บ <code class="inline">xmin</code> (transaction ที่สร้างแถวนี้) และ <code class="inline">xmax</code> (transaction ที่ทำให้แถวนี้ตาย ถ้ายังไม่ตายจะเป็น NULL) — Postgres <b>ไม่เคยแก้ข้อมูลทับที่เดิม</b> แต่เขียนแถวใหม่เสมอ (append-only)</p>
+    <div class="stage" id="mvcc-stage" style="min-height:90px;"></div>
+    <button class="play-btn" onclick="playMvccUpdate()">▶ จำลอง UPDATE 1 แถว</button>
+    <div class="desc" id="mvcc-info"></div>
   </div>
 
   <div class="card">
-    <h3>🎯 TID Scan</h3>
-    <p class="desc">เมื่อรู้ตำแหน่งกายภาพ (ctid) ของแถวอยู่แล้ว (เช่นเก็บ bookmark ไว้) จะกระโดดตรงเข้าไปอ่านได้เลยโดยไม่ต้องผ่าน index</p>
-    <div class="stage" id="tid-stage"></div>
-    <button class="play-btn" onclick="highlightSequence('tid-stage',[11],'hit2',0)">▶ jump ด้วย ctid</button>
-    <pre class="plan">SELECT * FROM posts WHERE ctid = '(3,5)';  -- Tid Scan</pre>
+    <h3>🔥 HOT Update (Heap-Only Tuple)</h3>
+    <p class="desc">ถ้าแถวใหม่ยังอยู่ "หน้าเดียวกัน" กับแถวเดิม (มีที่ว่างพอ) และไม่ได้แก้คอลัมน์ที่มี index เลย Postgres จะทำ HOT update — แก้แค่ลิงก์ภายในหน้า โดย <b>ไม่ต้องแตะ index เลยสักตัว</b> เร็วกว่ามาก</p>
+    <div class="grid2">
+      <div>
+        <div class="desc" style="margin:2px;">✅ HOT Update (ในหน้าเดียวกัน)</div>
+        <div class="stage" id="hot-yes" style="min-height:70px;"></div>
+      </div>
+      <div>
+        <div class="desc" style="margin:2px;">❌ Update ปกติ (ต้องย้ายหน้า + แก้ index)</div>
+        <div class="stage" id="hot-no" style="min-height:70px;"></div>
+      </div>
+    </div>
+    <button class="play-btn" onclick="playHot()">▶ เปรียบเทียบ</button>
   </div>
 
   <div class="card">
-    <h3>🆕 Index Skip Scan (PostgreSQL 18+)</h3>
-    <p class="desc">Composite index <code class="inline">(store_id, product_id)</code> เดิมถ้า query กรองแค่คอลัมน์หลัง (<code class="inline">product_id</code>) โดยไม่ระบุ <code class="inline">store_id</code> เลย ก่อน PG18 ต้องไล่อ่านทุก entry ในดัชนี ตั้งแต่ PG18 planner จะ "กระโดดข้าม" กลุ่มค่าที่ซ้ำได้</p>
-    <div class="desc">Index entries (จัดกลุ่มตาม store_id: A,A,A | B,B,B | C,C,C):</div>
-    <div class="stage" id="skip-stage"></div>
-    <button class="play-btn alt" onclick="highlightSequence('skip-stage',[0,1,2,3,4,5,6,7,8],'hit',110)">▶ ก่อน PG18: อ่านทุก entry</button>
-    <button class="play-btn" onclick="resetBoxes('skip-stage');highlightSequence('skip-stage',[0,3,6],'hitskip',400)">▶ PG18 Skip Scan: กระโดดข้ามกลุ่ม</button>
+    <h3>🗺️ Free Space Map (FSM)</h3>
+    <p class="desc">Postgres เก็บแผนที่แยกต่างหากไว้บอกว่าแต่ละหน้ามีที่ว่างเหลือเท่าไหร่ เวลา INSERT จะเปิด FSM มาหาหน้าที่ "พอมีที่" ก่อน แทนที่จะไปต่อท้ายไฟล์เสมอ</p>
+    <div class="bucket-row" id="fsm-grid"></div>
+    <button class="play-btn" onclick="playFsm()">▶ หา Page ว่างสำหรับ INSERT ใหม่</button>
   </div>
 
   <div class="card">
-    <h3>🔗 Bitmap AND / OR — รวมหลาย Index เข้าด้วยกัน</h3>
-    <p class="desc">เมื่อ query มีหลายเงื่อนไขและแต่ละคอลัมน์มี index แยกกัน Planner สามารถสร้าง bitmap จากแต่ละ index แล้วนำมา AND/OR รวมกันก่อนไปอ่าน heap ครั้งเดียว</p>
-    <pre class="plan">BitmapAnd
-  ->  Bitmap Index Scan on idx_status   (cond: status='paid')
-  ->  Bitmap Index Scan on idx_customer (cond: customer_id=88)
--- รวม bitmap 2 อันก่อนไปอ่าน heap รอบเดียว แทนที่จะ join 2 รอบ</pre>
+    <h3>👁️ Visibility Map (VM) — หัวใจของ Index Only Scan</h3>
+    <p class="desc">แต่ละหน้าจะมี 1 บิตบอกว่า "ทุกแถวในหน้านี้มองเห็นได้จากทุก transaction แล้ว" (all-visible) ถ้าใช่ Postgres จะ<b>ข้ามการเข้า heap</b>ได้เลยตอน Index Only Scan และ VACUUM ก็ข้ามหน้านี้ได้เช่นกัน (ประหยัดงานมหาศาล)</p>
+    <div class="bucket-row" id="vm-grid"></div>
+    <button class="play-btn" onclick="playVm()">▶ Index Only Scan ใช้ VM ข้าม heap</button>
+    <div class="desc" id="vm-info"></div>
+  </div>
+
+  <div class="card">
+    <h3>🧠 Buffer Pool (shared_buffers) — ก่อน Scan ต้องผ่าน RAM เสมอ</h3>
+    <p class="desc">ไม่ว่าจะ scan แบบไหน Postgres ต้องขอ "pin" หน้านั้นเข้ามาใน buffer pool (RAM) ก่อนเสมอ ถ้าหน้านั้นเคยถูกใช้แล้วจะเจอใน cache (hit) แต่ถ้าไม่เคยต้องไปอ่านจาก disk (miss) — นี่คือที่มาของ <code class="inline">Buffers: hit/read</code> ใน EXPLAIN</p>
+    <div class="desc" style="margin:2px;">💽 Disk (pages เรียงเป็นไฟล์)</div>
+    <div class="stage" id="disk-stage"></div>
+    <div class="desc" style="margin:10px 2px 2px;">🧠 Buffer Pool (RAM, จำนวนช่องจำกัด — ที่นี่มี 4 ช่อง)</div>
+    <div class="stage" id="buf-stage"></div>
+    <button class="play-btn" onclick="playBufferPool()">▶ จำลองการอ่านหน้าเข้า Buffer Pool</button>
+  </div>
+
+  <div class="card">
+    <h3>📍 ctid — ที่อยู่กายภาพของแถว (Page, Offset)</h3>
+    <p class="desc">ทุกแถวมี <code class="inline">ctid</code> ซ่อนอยู่ เช่น <code class="inline">(0,5)</code> หมายถึง "หน้าเลข 0 ช่อง line pointer ที่ 5" — นี่คือสิ่งที่ <b>Index เก็บไว้ชี้กลับมาที่ heap</b> เวลาทำ Index Scan (ตรงกับอนิเมชัน "กระโดดเข้า Heap" ในแท็บ EXPLAIN)</p>
+    <div class="stage" id="ctid-stage"></div>
+    <button class="play-btn" onclick="highlightSequence('ctid-stage',[5],'hit2',0)">▶ ค้นหาแถวที่ ctid=(0,5)</button>
+  </div>
+
+  <div class="card">
+    <h3>🧹 VACUUM — เก็บกวาด Dead Tuples คืนพื้นที่</h3>
+    <p class="desc">เมื่อ UPDATE/DELETE ทำให้เกิด dead tuple ค้างอยู่ VACUUM จะไล่ mark line pointer เป็น "unused" คืนพื้นที่กลับเข้า FSM และอัปเดต Visibility Map ให้ Index Only Scan เร็วขึ้น (ถ้าไม่ VACUUM เป็นประจำ ตารางจะบวม/"bloat" และ scan ช้าลงเรื่อยๆ)</p>
+    <div class="stage" id="vacuum-stage"></div>
+    <button class="play-btn alt" onclick="playVacuum()">1️⃣ ก่อน VACUUM (มี dead tuples ค้าง)</button>
+    <button class="play-btn" onclick="afterVacuum()">2️⃣ หลัง VACUUM (คืนพื้นที่แล้ว)</button>
   </div>
 </section>
 
@@ -500,7 +542,7 @@ SELECT * FROM users WHERE phone = 0812345678;</pre>
     <div class="qa-head">8. COUNT(*) แบบแม่นยำบนตารางมหาศาล</div>
     <div class="qa-bad"><span class="qa-tag">❌ แย่</span>
       <pre>SELECT COUNT(*) FROM big_events;</pre>
-      <div class="why">ต้อง Seq Scan ทั้งตารางเพื่อนับแถวจริง (Postgres ไม่มี count cache แบบ MyISAM) ช้ามากถ้ามีหลักสิบล้านแถว</div>
+      <div class="why">ต้อง Seq Scan ทั้งตารางเพื่อนับแถวจริง (Postgres ไม่มี count cache) ช้ามากถ้ามีหลักสิบล้านแถว</div>
     </div>
     <div class="qa-good"><span class="qa-tag">✅ ดี</span>
       <pre>SELECT reltuples::bigint AS estimate
@@ -592,13 +634,6 @@ buildBoxGrid('stage-bm-b',24,i=>'');
 buildBoxGrid('nl-outer',4,i=>'C'+(i+1));
 buildBoxGrid('nl-inner',3,i=>'O'+(i+1));
 buildBoxGrid('gin-stage',16,i=>'#'+i);
-buildBoxGrid('offset-stage',30,i=>i);
-buildBoxGrid('keyset-stage',30,i=>i);
-buildBoxGrid('tid-stage',16,i=>i);
-buildBoxGrid('skip-stage',9,i=>['A1','A2','A3','B1','B2','B3','C1','C2','C3'][i]);
-buildBoxGrid('pw-0',10,()=>'');
-buildBoxGrid('pw-1',10,()=>'');
-buildBoxGrid('pw-2',10,()=>'');
 
 // ---------- Section 1 demos ----------
 function playSeq(){
@@ -663,7 +698,7 @@ function initHashJoin(){
 }
 initHashJoin();
 function playHashJoin(){
-  document.querySelectorAll('.bucket').forEach(b=>{b.classList.remove('flash'); b.querySelector('.cnt').textContent='0';});
+  document.querySelectorAll('.bucket').forEach(b=>{b.classList.remove('flash'); const c=b.querySelector('.cnt'); if(c) c.textContent='0';});
   const counts=[0,0,0,0];
   const buildBoxes=[...document.querySelectorAll('#hj-build .box')];
   buildBoxes.forEach(b=>b.className='box');
@@ -672,7 +707,7 @@ function playHashJoin(){
       const bucket=Number(b.dataset.bucket);
       b.classList.add('hit');
       counts[bucket]++;
-      const bEl=document.querySelector('.bucket[data-b="'+bucket+'"]');
+      const bEl=document.querySelector('#hj-buckets .bucket[data-b="'+bucket+'"]');
       bEl.classList.add('flash');
       bEl.querySelector('.cnt').textContent=counts[bucket];
     }, i*350);
@@ -700,7 +735,7 @@ function initMerge(){
 initMerge();
 function playMergeJoin(){
   document.getElementById('mj-out').innerHTML='';
-  let i=0,j=0, delay=0;
+  let delay=0;
   const step=700;
   function moveP(id,idx){ document.getElementById(id).style.left=(idx*36)+'px'; }
   moveP('ptrA',0); moveP('ptrB',0);
@@ -733,7 +768,7 @@ renderSort();
 function playSort(){
   buildBoxGrid('stage-sort',16,()=>Math.floor(Math.random()*90)+10);
   const boxes=[...document.querySelectorAll('#stage-sort .box')];
-  boxes.forEach((b,i)=>{ b.style.height=(Number(b.textContent)+10)+'px'; b.textContent=''; });
+  boxes.forEach((b)=>{ b.style.height=(Number(b.textContent)+10)+'px'; b.textContent=''; });
   setTimeout(()=>{
     const vals=boxes.map(b=>parseInt(b.style.height)).sort((a,b)=>a-b);
     boxes.forEach((b,i)=>{ b.style.height=vals[i]+'px'; b.classList.add('hit2'); });
@@ -745,6 +780,9 @@ function playParallel(){
     highlightSequence(id,[...Array(10).keys()],'hit2',70);
   });
 }
+buildBoxGrid('pw-0',10,()=>'');
+buildBoxGrid('pw-1',10,()=>'');
+buildBoxGrid('pw-2',10,()=>'');
 
 // ---------- Section 2 demos ----------
 function playBrin(){
@@ -753,29 +791,160 @@ function playBrin(){
   setTimeout(()=>document.getElementById('br-4').classList.add('hit'), 400);
 }
 
-// ---------- Section 3 demos ----------
-function updateOffset(v){
-  const boxes=[...document.querySelectorAll('#offset-stage .box')];
-  boxes.forEach((b,i)=>{
-    b.className='box';
-    if(i<Number(v)) b.classList.add('discarded');
-    else if(i<Number(v)+5) b.classList.add('kept');
-  });
-  document.getElementById('offset-info').textContent =
-    `OFFSET ${v} LIMIT 5 → ฐานข้อมูลต้องอ่าน (และทิ้ง) ${v} แถวก่อนถึงหน้านี้ทุกครั้ง (ยิ่งเลขหน้ามาก ยิ่งช้า)`;
+// ---------- Section 3: Database Pages demos ----------
+
+// 1) Page anatomy
+const PAGE_MAX_ROWS=18;
+let pageRows=0;
+function renderPage(){
+  const lpPct = (pageRows/PAGE_MAX_ROWS*12).toFixed(1);
+  const tuplePct = (pageRows/PAGE_MAX_ROWS*66).toFixed(1);
+  const freePct = Math.max(92-lpPct-tuplePct,0).toFixed(1);
+  document.getElementById('seg-lp').style.width = lpPct+'%';
+  document.getElementById('seg-free').style.width = freePct+'%';
+  document.getElementById('seg-tuple').style.width = tuplePct+'%';
+  document.getElementById('seg-lp').textContent = pageRows>0 ? pageRows+' LP' : '';
+  document.getElementById('seg-tuple').textContent = pageRows>0 ? pageRows+' Tuples' : '';
+  const seg = document.getElementById('seg-free');
+  if(pageRows>=PAGE_MAX_ROWS){
+    seg.style.background='#7f1d1d'; seg.textContent='เต็มแล้ว!';
+    document.getElementById('page-info').textContent = `${pageRows} แถวในหน้านี้ · Page เต็ม! INSERT รอบต่อไปต้องไปหน้าใหม่`;
+  } else {
+    seg.style.background='#1e293b'; seg.textContent = freePct>5 ? 'Free Space' : '';
+    document.getElementById('page-info').textContent = `${pageRows} แถวในหน้านี้ · เหลือพื้นที่ว่างประมาณ ${freePct}%`;
+  }
 }
-updateOffset(0);
-let keysetPage=0;
-function playKeyset(){
-  resetBoxes('keyset-stage');
-  const start=keysetPage*5;
-  highlightSequence('keyset-stage',[start],'hitskip',0);
+function addTupleToPage(){
+  if(pageRows>=PAGE_MAX_ROWS){ return; }
+  pageRows++;
+  renderPage();
+}
+function resetPage(){ pageRows=0; renderPage(); }
+renderPage();
+
+// 2) MVCC update
+function playMvccUpdate(){
+  const stage=document.getElementById('mvcc-stage');
+  stage.innerHTML = `<div class="box kept" style="width:150px;height:auto;padding:8px;font-size:.68rem;line-height:1.5;">tuple v1<br>xmin=100<br>xmax=NULL<br>ctid=(0,1)</div>`;
+  document.getElementById('mvcc-info').textContent='แถวเดิม (v1) กำลังถูกมองเห็นอยู่ ยังไม่มีใคร UPDATE';
   setTimeout(()=>{
-    for(let i=start;i<start+5 && i<30;i++){
-      document.querySelectorAll('#keyset-stage .box')[i].classList.add('kept');
-    }
-  },250);
-  keysetPage=(keysetPage+1)%6;
+    stage.innerHTML = `
+      <div class="box discarded" style="width:150px;height:auto;padding:8px;font-size:.68rem;line-height:1.5;">tuple v1 (dead)<br>xmin=100<br>xmax=105<br>ctid=(0,1)</div>
+      <div style="align-self:center;font-size:1.3rem;color:var(--blue);">➜</div>
+      <div class="box hit2" style="width:150px;height:auto;padding:8px;font-size:.68rem;line-height:1.5;">tuple v2 (ใหม่)<br>xmin=105<br>xmax=NULL<br>ctid=(0,2)</div>
+    `;
+    document.getElementById('mvcc-info').textContent = 'UPDATE ไม่ได้แก้ทับที่เดิม แต่สร้างแถวใหม่ (v2) แล้ว mark แถวเก่า (v1) เป็น dead — v1 จะถูกเก็บกวาดทีหลังโดย VACUUM';
+  }, 900);
+}
+
+// 3) HOT update comparison
+function playHot(){
+  document.getElementById('hot-yes').innerHTML = `
+    <div class="box" style="width:60px;height:auto;padding:6px;">Page 5</div>
+    <div class="box discarded" style="width:60px;height:auto;padding:6px;">old tuple</div>
+    <div class="box hit2" style="width:60px;height:auto;padding:6px;">new tuple</div>
+    <div class="box" style="width:120px;height:auto;padding:6px;background:#166534;color:#bbf7d0;">Index: ไม่ต้องแก้ ✅</div>
+  `;
+  document.getElementById('hot-no').innerHTML = `
+    <div class="box" style="width:60px;height:auto;padding:6px;">Page 5</div>
+    <div class="box discarded" style="width:60px;height:auto;padding:6px;">old tuple</div>
+    <div style="align-self:center;">➡</div>
+    <div class="box" style="width:60px;height:auto;padding:6px;">Page 9</div>
+    <div class="box hit" style="width:60px;height:auto;padding:6px;">new tuple</div>
+    <div class="box" style="width:120px;height:auto;padding:6px;background:#7f1d1d;color:#fecaca;">Index: ต้องแก้ ❌</div>
+  `;
+}
+
+// 4) Free Space Map
+function buildFsm(){
+  const grid=document.getElementById('fsm-grid'); grid.innerHTML='';
+  const freeVals=[10,80,45,5,60,90];
+  freeVals.forEach((v,i)=>{
+    const d=document.createElement('div'); d.className='bucket'; d.dataset.free=v;
+    d.innerHTML=`<div>Page ${i}</div><div class="cnt">${v}% ว่าง</div>`;
+    grid.appendChild(d);
+  });
+}
+buildFsm();
+function playFsm(){
+  const buckets=[...document.querySelectorAll('#fsm-grid .bucket')];
+  buckets.forEach(b=>b.classList.remove('flash'));
+  const target=buckets.find(b=>Number(b.dataset.free)>=50);
+  setTimeout(()=>{ if(target) target.classList.add('flash'); }, 300);
+}
+
+// 5) Visibility Map
+function buildVm(){
+  const grid=document.getElementById('vm-grid'); grid.innerHTML='';
+  const vis=[true,true,false,true,false,true];
+  vis.forEach((v,i)=>{
+    const d=document.createElement('div'); d.className='bucket'; d.dataset.vis=v;
+    d.innerHTML=`<div>Page ${i}</div><div class="cnt">${v?'✅ visible':'❌ dirty'}</div>`;
+    grid.appendChild(d);
+  });
+}
+buildVm();
+function playVm(){
+  const buckets=[...document.querySelectorAll('#vm-grid .bucket')];
+  buckets.forEach(b=>b.classList.remove('flash'));
+  let skip=0, fetch=0;
+  buckets.forEach((b,i)=>{
+    setTimeout(()=>{
+      const isVis=b.dataset.vis==='true';
+      b.classList.add('flash');
+      if(isVis) skip++; else fetch++;
+      document.getElementById('vm-info').textContent = `ข้าม heap ไปแล้ว ${skip} หน้า (all-visible ✅) · ต้องเข้า heap จริง ${fetch} หน้า (ยังมี transaction ที่มองไม่เห็นทั้งหมด)`;
+    }, i*400);
+  });
+}
+
+// 6) Buffer Pool
+buildBoxGrid('disk-stage',8,i=>'P'+i);
+buildBoxGrid('buf-stage',4,()=>'-');
+function playBufferPool(){
+  resetBoxes('disk-stage');
+  const bufSlots=[...document.querySelectorAll('#buf-stage .box')];
+  bufSlots.forEach(b=>{b.className='box'; b.textContent='-';});
+  const diskBoxes=[...document.querySelectorAll('#disk-stage .box')];
+  diskBoxes.forEach((b,i)=>{ b.textContent='P'+i; });
+  diskBoxes.forEach((d,i)=>{
+    setTimeout(()=>{
+      d.classList.add('hit');
+      const slot=bufSlots[i % bufSlots.length];
+      slot.classList.remove('hit2');
+      void slot.offsetWidth;
+      slot.classList.add('hit2');
+      slot.textContent = 'P'+i;
+    }, i*500);
+  });
+}
+
+// 7) ctid
+buildBoxGrid('ctid-stage',12,i=>'(0,'+i+')');
+
+// 8) VACUUM
+function playVacuum(){
+  const stage=document.getElementById('vacuum-stage'); stage.innerHTML='';
+  const states=['alive','dead','alive','dead','dead','alive'];
+  states.forEach((s)=>{
+    const d=document.createElement('div');
+    d.className='box '+(s==='dead'?'discarded':'kept');
+    d.style.width='60px'; d.style.height='auto'; d.style.padding='6px';
+    d.textContent = s==='dead' ? 'dead' : 'live';
+    stage.appendChild(d);
+  });
+}
+function afterVacuum(){
+  const stage=document.getElementById('vacuum-stage'); stage.innerHTML='';
+  const states=['alive','unused','alive','unused','unused','alive'];
+  states.forEach((s)=>{
+    const d=document.createElement('div');
+    d.className='box';
+    d.style.width='60px'; d.style.height='auto'; d.style.padding='6px';
+    if(s==='unused'){ d.style.background='#0d1526'; d.style.border='1px dashed #334155'; d.style.color='#475569'; d.textContent='ว่าง'; }
+    else { d.classList.add('kept'); d.textContent='live'; }
+    stage.appendChild(d);
+  });
 }
 </script>
 </body>
