@@ -1,0 +1,8 @@
+---
+layout: post
+title:  "K6 Settings"
+date:   2026-10-29 00:00:00 +0000
+categories: k6
+---
+
+[Link](/documents/20261029-k6-settings.html)

@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="th" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เข้าใจ Scenario, Executor และ Stage แบบทะลุปรุโปร่ง | Load Testing Interactive Guide</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Prompt & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Prompt', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        k6: {
+                            purple: '#7d64ff',
+                            indigo: '#4c32cc',
+                            cyan: '#00d2ff',
+                            emerald: '#10b981',
+                            amber: '#f59e0b',
+                            rose: '#f43f5e'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #0b0f19;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        .glass-card {
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glow-purple {
+            box-shadow: 0 0 25px -5px rgba(125, 100, 255, 0.35);
+        }
+        .glow-cyan {
+            box-shadow: 0 0 25px -5px rgba(0, 210, 255, 0.35);
+        }
+        .glow-amber {
+            box-shadow: 0 0 25px -5px rgba(245, 158, 11, 0.35);
+        }
+        .code-highlight-scenario {
+            background: rgba(125, 100, 255, 0.18);
+            border-left: 3px solid #7d64ff;
+            transition: all 0.25s ease;
+        }
+        .code-highlight-executor {
+            background: rgba(0, 210, 255, 0.18);
+            border-left: 3px solid #00d2ff;
+            transition: all 0.25s ease;
+        }
+        .code-highlight-stage {
+            background: rgba(245, 158, 11, 0.18);
+            border-left: 3px solid #f59e0b;
+            transition: all 0.25s ease;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        input[type="range"] {
+            accent-color: #7d64ff;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-k6-purple selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-50 glass-card border-b border-slate-800/80">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-k6-purple to-k6-cyan flex items-center justify-center shadow-lg shadow-k6-purple/30">
+                    <i class="fa-solid fa-gauge-high text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold bg-gradient-to-r from-white via-purple-200 to-cyan-200 bg-clip-text text-transparent">
+                        LoadTest Masterclass
+                    </h1>
+                    <p class="text-xs text-slate-400">ความสัมพันธ์ของ Scenario • Executor • Stage</p>
+                </div>
+            </div>
+            <nav class="hidden md:flex items-center space-x-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+                <a href="#concept-section" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition">1. โครงสร้างความสัมพันธ์</a>
+                <a href="#playground-section" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-k6-purple/20 text-purple-300 border border-k6-purple/40 transition">2. Interactive Graph & Lab</a>
+                <a href="#matrix-section" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition">3. ตารางเปรียบเทียบ Executor</a>
+                <a href="#quiz-section" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition">4. ทดสอบความเข้าใจ</a>
+            </nav>
+            <div class="flex items-center space-x-2">
+                <span class="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-1.5"></span> k6 Architecture
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+
+        <!-- Hero Section & Mental Model -->
+        <section id="concept-section" class="space-y-6">
+            <div class="text-center max-w-3xl mx-auto space-y-3">
+                <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-medium">
+                    <i class="fa-solid fa-layer-group"></i>
+                    <span>Mental Model สำหรับวิศวกรทดสอบประสิทธิภาพ (Performance Testing)</span>
+                </div>
+                <h2 class="text-2xl sm:text-4xl font-bold text-white tracking-tight">
+                    ทำไมต้องตั้งค่า <span class="text-k6-purple">Scenario</span>, <span class="text-k6-cyan">Executor</span> และ <span class="text-k6-amber">Stage</span> ให้สัมพันธ์กัน?
+                </h2>
+                <p class="text-slate-400 text-sm sm:text-base leading-relaxed">
+                    ในการจำลองทราฟฟิกเข้าสู่ระบบ (Load Testing) ถ้าเปรียบการทดสอบเป็น <strong>"การจัดขบวนรถวิ่งบนทางด่วน"</strong> ทั้ง 3 ส่วนนี้คือลำดับชั้นที่สั่งการกันโดยตรง ลองคลิกที่แต่ละกล่องด้านล่างเพื่อดูหน้าที่และความเชื่อมโยง
+                </p>
+            </div>
+
+            <!-- Interactive Hierarchy Diagram -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <!-- Left Column: Visual Nested Hierarchy -->
+                <div class="lg:col-span-7 glass-card rounded-2xl p-6 border border-slate-800 relative overflow-hidden">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-xs font-mono uppercase tracking-wider text-slate-400">
+                            <i class="fa-solid fa-sitemap mr-1.5 text-k6-purple"></i> โครงสร้างลำดับชั้น (คลิกเพื่อไฮไลต์ความสัมพันธ์)
+                        </span>
+                        <span class="text-xs text-slate-400">options.scenarios</span>
+                    </div>
+
+                    <!-- Outer Box: Scenario -->
+                    <div id="box-scenario" onclick="selectConcept('scenario')" class="cursor-pointer rounded-2xl p-5 border-2 border-k6-purple/70 bg-k6-purple/10 hover:bg-k6-purple/15 transition-all duration-300 glow-purple">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-center space-x-3">
+                                <span class="w-9 h-9 rounded-xl bg-k6-purple text-white flex items-center justify-center font-bold shadow">1</span>
+                                <div>
+                                    <div class="flex items-center space-x-2">
+                                        <h3 class="text-lg font-bold text-white">Scenario (ฉากจำลองพฤติกรรม)</h3>
+                                        <span class="px-2 py-0.5 text-[11px] rounded bg-k6-purple/30 text-purple-200 font-mono">กรอบใหญ่สุด</span>
+                                    </div>
+                                    <p class="text-xs text-slate-300 mt-0.5">เปรียบเสมือน <strong>"ภารกิจของผู้ใช้กลุ่มหนึ่ง"</strong> เช่น กลุ่มคนเข้ามาส่องสินค้า vs กลุ่มคนกดสั่งซื้อ Flash Sale</p>
+                                </div>
+                            </div>
+                            <i class="fa-solid fa-circle-info text-purple-300 text-lg"></i>
+                        </div>
+
+                        <!-- Middle Box: Executor -->
+                        <div id="box-executor" onclick="event.stopPropagation(); selectConcept('executor')" class="mt-4 ml-2 sm:ml-6 cursor-pointer rounded-xl p-4 border-2 border-k6-cyan/70 bg-slate-900/90 hover:bg-slate-900 transition-all duration-300">
+                            <div class="flex items-start justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <span class="w-8 h-8 rounded-lg bg-k6-cyan text-slate-950 flex items-center justify-center font-bold shadow">2</span>
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <h4 class="text-base font-bold text-cyan-300">Executor (เครื่องยนต์ปล่อยโหลด)</h4>
+                                            <span class="px-2 py-0.5 text-[11px] rounded bg-k6-cyan/20 text-cyan-200 font-mono">1 Scenario มี 1 Executor</span>
+                                        </div>
+                                        <p class="text-xs text-slate-300 mt-0.5">เปรียบเสมือน <strong>"ระบบเกียร์ของเครื่องยนต์"</strong> ที่กำหนดว่าจะปล่อยโหลดด้วยวิธีคุม <em>จำนวนคน (VUs)</em> หรือคุม <em>อัตราความเร็ว (RPS/Arrival Rate)</em></p>
+                                    </div>
+                                </div>
+                                <i class="fa-solid fa-gears text-cyan-400"></i>
+                            </div>
+
+                            <!-- Inner Box: Stage -->
+                            <div id="box-stage" onclick="event.stopPropagation(); selectConcept('stage')" class="mt-4 ml-2 sm:ml-6 cursor-pointer rounded-xl p-4 border-2 border-k6-amber/70 bg-amber-500/10 hover:bg-amber-500/15 transition-all duration-300">
+                                <div class="flex items-start justify-between">
+                                    <div class="flex items-center space-x-3">
+                                        <span class="w-7 h-7 rounded-lg bg-k6-amber text-slate-950 flex items-center justify-center font-bold shadow">3</span>
+                                        <div>
+                                            <div class="flex items-center space-x-2 flex-wrap gap-1">
+                                                <h5 class="text-sm font-bold text-amber-300">Stages (สเต็ปการเร่ง/ผ่อนตามเวลา)</h5>
+                                                <span class="px-2 py-0.5 text-[10px] rounded bg-amber-500/30 text-amber-200 font-mono">ใช้เฉพาะ Ramping Executor!</span>
+                                            </div>
+                                            <p class="text-xs text-slate-300 mt-0.5">เปรียบเสมือน <strong>"คันเร่งและเบรกตามช่วงเวลา"</strong> เช่น ค่อยๆ เหยียบคันเร่งไปที่ 100 คนใน 1 นาที แล้วแช่ไว้ 3 นาที</p>
+                                        </div>
+                                    </div>
+                                    <i class="fa-solid fa-stairs text-amber-400"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Golden Rule Banner -->
+                    <div class="mt-4 p-3.5 rounded-xl bg-slate-900/90 border border-slate-700/80 flex items-center space-x-3">
+                        <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                            <i class="fa-solid fa-lightbulb"></i>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            <strong class="text-white">กฎเหล็กที่ต้องจำ:</strong> คุณจะตั้งค่า <code class="text-amber-300 font-mono">stages: [...]</code> ได้ <u>ก็ต่อเมื่อ</u> เลือก <code class="text-cyan-300 font-mono">executor</code> ตระกูล <strong>Ramping</strong> (<code class="text-cyan-200 font-mono">ramping-vus</code> หรือ <code class="text-cyan-200 font-mono">ramping-arrival-rate</code>) เท่านั้น! หากใช้ Executor แบบคงที่ (Constant) จะใช้การกำหนดค่า <code class="text-emerald-300 font-mono">duration</code> คู่กับ <code class="text-emerald-300 font-mono">vus</code> หรือ <code class="text-emerald-300 font-mono">rate</code> แทน
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Dynamic Concept Inspector -->
+                <div class="lg:col-span-5 glass-card rounded-2xl p-6 border border-slate-800 flex flex-col justify-between" id="concept-detail-panel">
+                    <!-- Dynamic content injected by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Interactive Playground & Live Graph Section -->
+        <section id="playground-section" class="space-y-6 pt-4">
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-800 pb-4">
+                <div>
+                    <div class="inline-flex items-center space-x-2 text-xs font-mono text-k6-cyan uppercase tracking-wider mb-1">
+                        <i class="fa-solid fa-sliders"></i>
+                        <span>Interactive Simulation Lab</span>
+                    </div>
+                    <h2 class="text-2xl font-bold text-white">ทดลองปรับแต่ง Scenario, Executor และ Stage พร้อมดูกราฟ Real-Time</h2>
+                    <p class="text-sm text-slate-400">เลือก Preset ด้านล่าง หรือปรับเปลี่ยน Executor และเพิ่ม/ลด Stage เพื่อดูว่ากราฟและโค้ดเปลี่ยนแปลงอย่างไร</p>
+                </div>
+
+                <!-- Preset Load Profile Buttons -->
+                <div class="flex flex-wrap gap-1.5">
+                    <button onclick="applyPreset('smoke')" id="preset-smoke" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center space-x-1.5">
+                        <i class="fa-solid fa-smog text-slate-400"></i><span>Smoke Test</span>
+                    </button>
+                    <button onclick="applyPreset('load')" id="preset-load" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-k6-purple text-white border border-purple-400 transition flex items-center space-x-1.5 shadow-lg shadow-k6-purple/25">
+                        <i class="fa-solid fa-users text-white"></i><span>Average Load</span>
+                    </button>
+                    <button onclick="applyPreset('stress')" id="preset-stress" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center space-x-1.5">
+                        <i class="fa-solid fa-fire text-amber-400"></i><span>Stress (ขั้นบันได)</span>
+                    </button>
+                    <button onclick="applyPreset('spike')" id="preset-spike" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center space-x-1.5">
+                        <i class="fa-solid fa-bolt text-rose-400"></i><span>Flash Sale Spike</span>
+                    </button>
+                    <button onclick="applyPreset('multi')" id="preset-multi" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 transition flex items-center space-x-1.5">
+                        <i class="fa-solid fa-layer-group text-emerald-400"></i><span>2 Scenarios พร้อมกัน!</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Interactive Grid: Controls (Left) + Graph & Code (Right) -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+                <!-- LEFT PANEL: Scenario, Executor & Stage Controls (5 cols) -->
+                <div class="lg:col-span-5 glass-card rounded-2xl p-5 border border-slate-800 space-y-5">
+
+                    <!-- Scenario Tabs + Multi-Scenario Toggle -->
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <div class="flex space-x-2">
+                            <button id="tab-sc1" onclick="switchScenarioTab(1)" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-k6-purple text-white flex items-center space-x-1.5">
+                                <span class="w-2 h-2 rounded-full bg-white"></span>
+                                <span id="tab-sc1-label">Scenario 1</span>
+                            </button>
+                            <button id="tab-sc2" onclick="switchScenarioTab(2)" class="hidden px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-emerald-400 border border-emerald-500/30 flex items-center space-x-1.5">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                <span id="tab-sc2-label">Scenario 2</span>
+                            </button>
+                        </div>
+
+                        <label class="inline-flex items-center cursor-pointer space-x-2">
+                            <span class="text-xs text-slate-400">เปิด Scenario ที่ 2</span>
+                            <input type="checkbox" id="multi-scenario-toggle" onchange="toggleSecondScenario(this.checked)" class="sr-only peer">
+                            <div class="relative w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                        </label>
+                    </div>
+
+                    <!-- Step 1: Scenario Settings -->
+                    <div class="p-3.5 rounded-xl bg-purple-950/20 border border-k6-purple/30 space-y-3"
+                         onmouseenter="highlightCodeSection('scenario')" onmouseleave="clearCodeHighlight()">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center">
+                                <span class="w-5 h-5 rounded bg-k6-purple text-white inline-flex items-center justify-center text-[11px] mr-2">1</span>
+                                ตั้งค่า Scenario (กรอบภารกิจ)
+                            </span>
+                            <span class="text-[11px] text-slate-400 font-mono">startTime: เวลาเริ่มรัน</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs text-slate-400 mb-1">ชื่อ Scenario (Key Name)</label>
+                                <input type="text" id="input-scenario-name" oninput="updateCurrentScenarioConfig()"
+                                    class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-sm font-mono text-white focus:outline-none focus:border-k6-purple">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-400 mb-1">เริ่มที่วินาทีที่ (<code class="text-purple-300">startTime</code>)</label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="range" id="input-start-time" min="0" max="60" step="5" oninput="updateCurrentScenarioConfig()" class="w-full">
+                                    <span id="label-start-time" class="text-xs font-mono text-purple-300 w-10 text-right">0s</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Executor Selector -->
+                    <div class="p-3.5 rounded-xl bg-cyan-950/20 border border-k6-cyan/30 space-y-3"
+                         onmouseenter="highlightCodeSection('executor')" onmouseleave="clearCodeHighlight()">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-cyan-300 uppercase tracking-wider flex items-center">
+                                <span class="w-5 h-5 rounded bg-k6-cyan text-slate-950 inline-flex items-center justify-center text-[11px] mr-2 font-bold">2</span>
+                                เลือก Executor (เครื่องยนต์จ่ายงาน)
+                            </span>
+                        </div>
+
+                        <div>
+                            <select id="select-executor" onchange="onExecutorChange(this.value)"
+                                class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-cyan-500/40 text-sm font-mono text-cyan-200 focus:outline-none focus:border-k6-cyan">
+                                <optgroup label="ตระกูลไต่ระดับตามเวลา (มี Stages)">
+                                    <option value="ramping-vus">ramping-vus (ไต่ระดับจำนวนคน VUs ตาม Stage)</option>
+                                    <option value="ramping-arrival-rate">ramping-arrival-rate (ไต่ระดับ RPS/Iterations ตาม Stage)</option>
+                                </optgroup>
+                                <optgroup label="ตระกูลคงที่ (ไม่มี Stages - ใช้ Duration)">
+                                    <option value="constant-vus">constant-vus (แช่จำนวนคน VUs คงที่ตลอดเวลา)</option>
+                                    <option value="constant-arrival-rate">constant-arrival-rate (ยิงด้วยอัตรา RPS คงที่ตลอดเวลา)</option>
+                                </optgroup>
+                                <optgroup label="ตระกูลกำหนดจำนวนรอบ (ไม่มี Stages)">
+                                    <option value="per-vu-iterations">per-vu-iterations (ให้ VUs แต่ละคนทำงานครบ X รอบแล้วจบ)</option>
+                                </optgroup>
+                            </select>
+                        </div>
+
+                        <!-- Executor Relationship Badge -->
+                        <div id="executor-relationship-banner" class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs text-slate-300 leading-relaxed">
+                            <!-- Injected dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Stage Builder OR Fixed Parameters -->
+                    <div id="stage-builder-container" class="p-3.5 rounded-xl bg-amber-950/20 border border-k6-amber/30 space-y-3"
+                         onmouseenter="highlightCodeSection('stage')" onmouseleave="clearCodeHighlight()">
+                        <!-- Dynamic stage controls injected by JS -->
+                    </div>
+
+                </div>
+
+                <!-- RIGHT PANEL: Interactive Graph + Simulation + Live Code (7 cols) -->
+                <div class="lg:col-span-7 space-y-6">
+
+                    <!-- Graph Card -->
+                    <div class="glass-card rounded-2xl p-5 border border-slate-800 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="text-base font-bold text-white">กราฟความสัมพันธ์ของ Load Profile ตามเวลา</h3>
+                                    <span id="graph-y-unit-badge" class="px-2 py-0.5 rounded text-[11px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                        แกน Y: VUs (คน)
+                                    </span>
+                                </div>
+                                <p class="text-xs text-slate-400 mt-0.5">เลื่อนเมาส์บนกราฟเพื่อดูสถานะในแต่ละวินาที หรือกดปุ่ม <strong>จำลองการรัน</strong></p>
+                            </div>
+
+                            <!-- Simulation Controls -->
+                            <div class="flex items-center space-x-2">
+                                <button id="btn-simulate" onclick="toggleSimulation()" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-k6-purple to-k6-cyan text-white shadow-lg shadow-k6-purple/25 hover:opacity-95 transition flex items-center space-x-1.5">
+                                    <i id="sim-icon" class="fa-solid fa-play"></i>
+                                    <span id="sim-text">จำลองการรัน (Simulate)</span>
+                                </button>
+                                <button onclick="resetSimulation()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700" title="รีเซ็ต">
+                                    <i class="fa-solid fa-rotate-left"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Live Telemetry Bar during Hover/Simulation -->
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-900/90 border border-slate-800/90">
+                            <div>
+                                <div class="text-[11px] text-slate-400">เวลาปัจจุบัน (Timeline)</div>
+                                <div id="telemetry-time" class="text-base font-mono font-bold text-white">0s / 60s</div>
+                            </div>
+                            <div>
+                                <div class="text-[11px] text-slate-400">โหลดของ Scenario 1</div>
+                                <div id="telemetry-val1" class="text-base font-mono font-bold text-purple-400">0 VUs</div>
+                            </div>
+                            <div>
+                                <div class="text-[11px] text-slate-400">โหลดรวม (Total Load)</div>
+                                <div id="telemetry-total" class="text-base font-mono font-bold text-cyan-300">0 Active</div>
+                            </div>
+                            <div>
+                                <div class="text-[11px] text-slate-400">สถานะ Stage ปัจจุบัน</div>
+                                <div id="telemetry-status" class="text-xs font-medium text-amber-300 truncate mt-0.5">พร้อมเริ่มทดสอบ</div>
+                            </div>
+                        </div>
+
+                        <!-- Responsive Interactive Canvas Container -->
+                        <div class="relative w-full h-72 sm:h-80 bg-slate-950/80 rounded-xl border border-slate-800/80 p-2 overflow-hidden">
+                            <canvas id="loadChartCanvas" class="w-full h-full cursor-crosshair"></canvas>
+                        </div>
+
+                        <!-- Graph Legend & Explanation -->
+                        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 pt-1">
+                            <div class="flex items-center space-x-4">
+                                <span class="inline-flex items-center"><span class="w-3 h-3 rounded-sm bg-k6-purple mr-1.5"></span> <span id="legend-sc1">Scenario 1</span></span>
+                                <span id="legend-sc2-wrap" class="hidden items-center"><span class="w-3 h-3 rounded-sm bg-emerald-400 mr-1.5"></span> <span id="legend-sc2">Scenario 2</span></span>
+                                <span class="inline-flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 mr-1.5"></span> จุดเปลี่ยน Stage (Target)</span>
+                            </div>
+                            <span id="preset-explanation" class="text-slate-300 italic"></span>
+                        </div>
+                    </div>
+
+                    <!-- Auto-Generated k6 Code Card -->
+                    <div class="glass-card rounded-2xl p-5 border border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <i class="fa-solid fa-code text-k6-cyan"></i>
+                                <h3 class="text-sm font-bold text-white">โค้ด k6 <code class="text-purple-300 font-mono">options</code> ที่สร้างจากการตั้งค่าของคุณ</h3>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span id="copy-toast" class="hidden text-xs text-emerald-400 font-medium">คัดลอกแล้ว!</span>
+                                <button onclick="copyGeneratedCode()" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 transition flex items-center space-x-1.5">
+                                    <i class="fa-regular fa-copy"></i>
+                                    <span>คัดลอกโค้ด</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Color Legend for Code -->
+                        <div class="flex flex-wrap gap-2 text-[11px]">
+                            <span class="px-2 py-0.5 rounded bg-k6-purple/20 text-purple-300 border border-k6-purple/30">สีม่วง = Scenario (ใครทำ/เริ่มเมื่อไหร่)</span>
+                            <span class="px-2 py-0.5 rounded bg-k6-cyan/20 text-cyan-300 border border-k6-cyan/30">สีฟ้า = Executor (รูปแบบการจ่ายโหลด)</span>
+                            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">สีส้ม = Stages (สเต็ปการเร่ง/ลดตามเวลา)</span>
+                        </div>
+
+                        <div class="bg-slate-950 rounded-xl p-4 border border-slate-800 overflow-x-auto max-h-80">
+                            <pre id="generated-code-block" class="text-xs font-mono leading-relaxed text-slate-200"></pre>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Executor Comparison Matrix -->
+        <section id="matrix-section" class="space-y-4 pt-4">
+            <div class="space-y-1">
+                <div class="inline-flex items-center space-x-2 text-xs font-mono text-amber-400 uppercase tracking-wider">
+                    <i class="fa-solid fa-table-list"></i>
+                    <span>Cheat Sheet สรุปการจับคู่</span>
+                </div>
+                <h2 class="text-2xl font-bold text-white">ตารางสรุป Executor ทั้ง 6 ตัว: ตัวไหนต้องใช้ Stage? ตัวไหนเหมาะกับงานอะไร?</h2>
+                <p class="text-sm text-slate-400">คลิกปุ่ม <strong>"ลองในกราฟ"</strong> ในตารางเพื่อโหลดค่าตัวอย่างขึ้นไปแสดงบนกราฟด้านบนทันที</p>
+            </div>
+
+            <div class="glass-card rounded-2xl border border-slate-800 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-900/90 border-b border-slate-800 text-xs uppercase text-slate-400">
+                                <th class="py-3.5 px-4">ชื่อ Executor</th>
+                                <th class="py-3.5 px-4">โหมดการควบคุม</th>
+                                <th class="py-3.5 px-4 text-center">ใช้ <code class="text-amber-400">stages</code> ได้ไหม?</th>
+                                <th class="py-3.5 px-4">พฤติกรรมการทำงาน</th>
+                                <th class="py-3.5 px-4">เหมาะกับสถานการณ์ใด?</th>
+                                <th class="py-3.5 px-4 text-right">ทดลอง</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/70 text-xs sm:text-sm">
+                            <tr class="hover:bg-slate-900/40 transition">
+                                <td class="py-3.5 px-4 font-mono font-semibold text-cyan-300">ramping-vus</td>
+                                <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-xs">คุมจำนวนคน (VUs)</span></td>
+                                <td class="py-3.5 px-4 text-center"><span class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold text-xs"><i class="fa-solid fa-check mr-1"></i>ใช้ Stages</span></td>
+                                <td class="py-3.5 px-4 text-slate-300">ปรับเพิ่มหรือลดจำนวน VUs ขึ้นลงตามช่วงเวลาที่กำหนดในแต่ละ Stage</td>
+                                <td class="py-3.5 px-4 text-slate-400">Load Test ปกติ, Stress Test ขั้นบันได, หรือ Spike Test จำลองคนทะลักเข้าเว็บ</td>
+                                <td class="py-3.5 px-4 text-right">
+                                    <button onclick="quickTryExecutor('ramping-vus')" class="px-2.5 py-1 rounded-lg bg-k6-purple/20 hover:bg-k6-purple text-purple-200 hover:text-white text-xs transition">ลองในกราฟ</button>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/40 transition">
+                                <td class="py-3.5 px-4 font-mono font-semibold text-cyan-300">ramping-arrival-rate</td>
+                                <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-xs">คุม RPS / อัตราเข้า</span></td>
+                                <td class="py-3.5 px-4 text-center"><span class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold text-xs"><i class="fa-solid fa-check mr-1"></i>ใช้ Stages</span></td>
+                                <td class="py-3.5 px-4 text-slate-300">ปรับเพิ่มหรือลดอัตราการยิง (Iterations/วินาที) ตาม Stage โดยไม่สนว่าระบบจะตอบช้าหรือเร็ว</td>
+                                <td class="py-3.5 px-4 text-slate-400">ทดสอบ API Gateway หรือระบบชำระเงินที่ต้องการวัด Throughput (RPS) ที่ค่อยๆ พุ่งสูงขึ้น</td>
+                                <td class="py-3.5 px-4 text-right">
+                                    <button onclick="quickTryExecutor('ramping-arrival-rate')" class="px-2.5 py-1 rounded-lg bg-k6-purple/20 hover:bg-k6-purple text-purple-200 hover:text-white text-xs transition">ลองในกราฟ</button>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/40 transition">
+                                <td class="py-3.5 px-4 font-mono font-semibold text-slate-200">constant-vus</td>
+                                <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-xs">คุมจำนวนคน (VUs)</span></td>
+                                <td class="py-3.5 px-4 text-center"><span class="px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-300 text-xs"><i class="fa-solid fa-xmark mr-1"></i>ไม่ใช้ (ใช้ duration)</span></td>
+                                <td class="py-3.5 px-4 text-slate-300">ปล่อย VUs จำนวนคงที่แช่ไว้ตั้งแต่ต้นจนจบเวลา <code class="text-amber-300">duration</code></td>
+                                <td class="py-3.5 px-4 text-slate-400">Smoke Test เช็คระบบเบื้องต้น หรือ Soak Test แช่โหลดนิ่งๆ ดูอาการ Memory Leak</td>
+                                <td class="py-3.5 px-4 text-right">
+                                    <button onclick="quickTryExecutor('constant-vus')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition">ลองในกราฟ</button>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/40 transition">
+                                <td class="py-3.5 px-4 font-mono font-semibold text-slate-200">constant-arrival-rate</td>
+                                <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-xs">คุม RPS / อัตราเข้า</span></td>
+                                <td class="py-3.5 px-4 text-center"><span class="px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-300 text-xs"><i class="fa-solid fa-xmark mr-1"></i>ไม่ใช้ (ใช้ rate + duration)</span></td>
+                                <td class="py-3.5 px-4 text-slate-300">ยิง Request ด้วยความเร็วคงที่ (เช่น 50 รอบ/วินาที) ตลอดระยะเวลาที่กำหนด</td>
+                                <td class="py-3.5 px-4 text-slate-400">ทดสอบ SLA ของ Microservice ที่การันตีว่าต้องรับโหลดได้คงที่ เช่น 100 RPS</td>
+                                <td class="py-3.5 px-4 text-right">
+                                    <button onclick="quickTryExecutor('constant-arrival-rate')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition">ลองในกราฟ</button>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/40 transition">
+                                <td class="py-3.5 px-4 font-mono font-semibold text-slate-200">per-vu-iterations</td>
+                                <td class="py-3.5 px-4"><span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-xs">คุมจำนวนรอบ (Iterations)</span></td>
+                                <td class="py-3.5 px-4 text-center"><span class="px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-300 text-xs"><i class="fa-solid fa-xmark mr-1"></i>ไม่ใช้ (ใช้ iterations)</span></td>
+                                <td class="py-3.5 px-4 text-slate-300">กำหนดให้ VU แต่ละคนรันสคริปต์จนครบจำนวนรอบที่ตั้งไว้แล้วหยุดทันที</td>
+                                <td class="py-3.5 px-4 text-slate-400">ทดสอบการสร้างข้อมูล (Data Seeding) เช่น มี Test User 10 บัญชี ให้แต่ละบัญชีสร้างออเดอร์คนละ 5 รายการ</td>
+                                <td class="py-3.5 px-4 text-right">
+                                    <button onclick="quickTryExecutor('per-vu-iterations')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition">ลองในกราฟ</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: Interactive Scenario Challenge / Quiz -->
+        <section id="quiz-section" class="space-y-4 pt-4 pb-8">
+            <div class="space-y-1">
+                <div class="inline-flex items-center space-x-2 text-xs font-mono text-emerald-400 uppercase tracking-wider">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>Interactive Quiz</span>
+                </div>
+                <h2 class="text-2xl font-bold text-white">บททดสอบความเข้าใจ: เลือกตั้งค่าอย่างไรให้ตรงโจทย์จริง?</h2>
+                <p class="text-sm text-slate-400">ลองตอบคำถาม 3 ข้อด้านล่างเพื่อเช็คว่าคุณเข้าใจการผสาน Scenario, Executor และ Stage อย่างแท้จริง</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Quiz 1 -->
+                <div class="glass-card rounded-2xl p-5 border border-slate-800 flex flex-col justify-between space-y-4">
+                    <div class="space-y-2">
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-300">โจทย์ข้อที่ 1</span>
+                        <h3 class="text-base font-bold text-white">แคมเปญ Flash Sale 12.12</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            ต้องการจำลองผู้ใช้ค่อยๆ เข้ามารอหน้าเว็บ 20 คนใน 30 วินาทีแรก จากนั้นพอถึงเวลาเที่ยงคืน คนพุ่งทะลักเป็น 300 คนภายใน 10 วินาที แล้วค่อยๆ ลดลง ควรตั้งค่าอย่างไร?
+                        </p>
+                    </div>
+                    <div class="space-y-2">
+                        <button onclick="checkQuiz(1, 'a', this)" class="w-full text-left p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition">
+                            A. ใช้ <code class="text-cyan-300">constant-vus</code> แล้วใส่ <code class="text-amber-300">stages</code> 3 สเต็ป
+                        </button>
+                        <button onclick="checkQuiz(1, 'b', this)" class="w-full text-left p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition">
+                            B. ใช้ <code class="text-cyan-300">ramping-vus</code> คู่กับ <code class="text-amber-300">stages</code> เพื่อเร่งและลดจำนวนคนตามเวลา
+                        </button>
+                        <button onclick="checkQuiz(1, 'c', this)" class="w-full text-left p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition">
+                            C. ใช้ <code class="text-cyan-300">per-vu-iterations</code> ตั้ง 300 รอบ
+                        </button>
+                        <div id="quiz-feedback-1" class="hidden p-2.5 rounded-lg text-xs"></div>
+                    </div>
+                </div>
+
+                <!-- Quiz 2 -->
+                <div class="glass-card rounded-2xl p-5 border border-slate-800 flex flex-col justify-between space-y-4">
+                    <div class="space-y-2">
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300">โจทย์ข้อที่ 2</span>
+                        <h3 class="text-base font-bold text-white">ทดสอบ SLA ของระบบรับชำระเงิน</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            ธนาคารกำหนด SLA ว่า API ต้องรองรับรายการโอนเงินด้วยอัตราคงที่ <strong>100 รายการต่อวินาที (RPS)</strong> ต่อเนื่องเป็นเวลา 5 นาที โดยไม่ต้องมีช่วงไต่ระดับ ควรเลือก Executor ตัวไหน?
+                        </p>
+                    </div>
+                    <div class="space-y-2">
+                        <button onclick="checkQuiz(2, 'a', this)" class="w-full text-left p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition">
+                            A. <code class="text-cyan-300">constant-arrival-rate</code> (กำหนด <code class="text-amber-300">rate: 100</code>, <code class="text-amber-300">duration: '5m'</code>)
+                        </button>
+                        <button onclick="checkQuiz(2, 'b', this)" class="w-full text-left p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition">
+                            B. <code class="text-cyan-300">constant-vus</code> (กำหนด <code class="text-amber-300">vus: 100</code> เพราะ 100 คนเท่ากับ 100 RPS เสมอ)
+                        </button>
+                        <button onclick="checkQuiz(2, 'c', this)" class="w-full text-left p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition">
+                            C. <code class="text-cyan-300">ramping-vus</code> โดยไม่ต้องใส่ <code class="text-amber-300">stages</code>
+                        </button>
+                        <div id="quiz-feedback-2" class="hidden p-2.5 rounded-lg text-xs"></div>
+                    </div>
+                </div>
+
+                <!-- Quiz 3 -->
+                <div class="glass-card rounded-2xl p-5 border border-slate-800 flex flex-col justify-between space-y-4">
+                    <div class="space-y-2">
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300">โจทย์ข้อที่ 3</span>
+                        <h3 class="text-base font-bold text-white">จำลอง 2 พฤติกรรมซ้อนทับกัน</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            มีผู้ใช้ทั่วไปเปิดดูแคตตาล็อกสินค้าเรื่อยๆ ตลอดเวลา และเมื่อผ่านไป 20 วินาที มีกลุ่มลูกค้า VIP กดแย่งซื้อสินค้าลิมิเต็ดพร้อมกัน เราควรออกแบบโครงสร้างอย่างไร?
+                        </p>
+                    </div>
+                    <div class="space-y-2">
+                        <button onclick="checkQuiz(3, 'a', this)" class="w-full text-left p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition">
+                            A. ใส่ 2 <code class="text-cyan-300">executor</code> ลงใน Scenario เดียวกัน
+                        </button>
+                        <button onclick="checkQuiz(3, 'b', this)" class="w-full text-left p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition">
+                            B. แยกเป็น 2 <code class="text-purple-300">scenarios</code> โดย Scenario ที่สองตั้งค่า <code class="text-purple-300">startTime: '20s'</code>
+                        </button>
+                        <button onclick="checkQuiz(3, 'c', this)" class="w-full text-left p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition">
+                            C. ไม่สามารถรันพร้อมกันในไฟล์เดียวได้ ต้องแยกรันคนละคำสั่ง
+                        </button>
+                        <div id="quiz-feedback-3" class="hidden p-2.5 rounded-lg text-xs"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <p>สื่อการสอน Interactive เรื่องความสัมพันธ์ของ Scenario, Executor และ Stage (อ้างอิงโครงสร้าง k6 Load Testing)</p>
+            <p class="text-slate-400">คลิกที่กราฟหรือปรับ Stage เพื่อเรียนรู้แบบ Real-Time</p>
+        </div>
+    </footer>
+
+    <!-- Interactive Application Logic -->
+    <script>
+        // ==========================================
+        // 1. CONCEPT HIERARCHY INSPECTOR DATA
+        // ==========================================
+        const conceptDetails = {
+            scenario: {
+                badge: '1. SCENARIO (กรอบภารกิจ)',
+                color: 'purple',
+                title: 'Scenario คือ "ฉากจำลองพฤติกรรมของผู้ใช้แต่ละกลุ่ม"',
+                analogy: 'เปรียบเทียบ: เหมือนการแบ่งกลุ่มนักแสดงในกองถ่าย เช่น กลุ่มที่ 1 เดินตลาดนัดทั่วไป, กลุ่มที่ 2 วิ่งกรูเข้าแถวซื้อของลดราคาตอนเที่ยงคืน',
+                points: [
+                    'ใน 1 ไฟล์สคริปต์การทดสอบ สามารถมีได้หลาย Scenario รันขนานกัน หรือเหลื่อมเวลากันด้วย <code>startTime</code>',
+                    'แต่ละ Scenario ต้องระบุ <strong>Executor เพียง 1 ตัว</strong> เพื่อกำหนดวิธีปล่อยโหลด',
+                    'สามารถแยกฟังก์ชันที่จะรันได้ด้วยพารามิเตอร์ <code>exec</code> (เช่น <code>exec: "browseProducts"</code> หรือ <code>exec: "checkoutOrder"</code>)'
+                ],
+                keyProps: ['executor (บังคับ)', 'startTime', 'gracefulStop', 'exec', 'env / tags']
+            },
+            executor: {
+                badge: '2. EXECUTOR (เครื่องยนต์ปล่อยโหลด)',
+                color: 'cyan',
+                title: 'Executor คือ "หัวใจที่กำหนดกฎการปล่อยโหลดและตัดสินว่ามี Stage หรือไม่"',
+                analogy: 'เปรียบเทียบ: เหมือนระบบเกียร์รถยนต์ ว่าคุณจะขับแบบล็อกความเร็วคงที่ (Cruise Control = Constant) หรือจะเหยียบคันเร่งปรับความเร็วขึ้นลงตามเวลา (Ramping)',
+                points: [
+                    '<strong>กลุ่มคุมจำนวนคน (VU-based):</strong> เช่น <code>constant-vus</code>, <code>ramping-vus</code> เน้นจำลองจำนวนผู้ใช้ที่เปิดหน้าเว็บค้างไว้พร้อมๆ กัน',
+                    '<strong>กลุ่มคุมความเร็วการยิง (Arrival-rate):</strong> เช่น <code>constant-arrival-rate</code>, <code>ramping-arrival-rate</code> เน้นคุมจำนวน Request ต่อวินาที (RPS) โดยที่ k6 จะดึง VUs ที่เตรียมไว้ (<code>preAllocatedVUs</code>) มาช่วยยิงให้ได้ตามเป้า',
+                    '<strong>ความสัมพันธ์สำคัญ:</strong> เฉพาะ Executor ที่ขึ้นต้นด้วยคำว่า <code>ramping-...</code> เท่านั้นที่จะเปิดรับพารามิเตอร์ <code>stages</code>!'
+                ],
+                keyProps: ['ramping-vus', 'ramping-arrival-rate', 'constant-vus', 'constant-arrival-rate', 'per-vu-iterations']
+            },
+            stage: {
+                badge: '3. STAGES (สเต็ปการเร่ง/ผ่อนตามเวลา)',
+                color: 'amber',
+                title: 'Stage คือ "ขั้นบันไดกำหนดเป้าหมาย (Target) และระยะเวลา (Duration)"',
+                analogy: 'เปรียบเทียบ: เหมือนตารางซ้อมวิ่งบนลู่วิ่ง เช่น นาทีที่ 1 เร่งความเร็วไปที่ระดับ 5, นาทีที่ 2-4 วิ่งคงที่ที่ระดับ 5, นาทีที่ 5 ค่อยๆ ชะลอลงมาเป็น 0 (Cool-down)',
+                points: [
+                    'แต่ละ Stage ประกอบด้วย 2 ค่าหลักเสมอ คือ <code>duration</code> (ใช้เวลาเท่าไหร่) และ <code>target</code> (ไต่ไปที่กี่ VUs หรือกี่ RPS)',
+                    'ถ้า Stage ก่อนหน้ามี <code>target: 50</code> และ Stage ถัดไปตั้ง <code>target: 50</code> เท่ากัน กราฟจะเป็นเส้นตรงแนวนอน เรียกว่าช่วง <strong>Hold / Steady State</strong>',
+                    'ถ้าตั้ง <code>target: 0</code> ใน Stage สุดท้าย คือการทำ <strong>Ramp-down (Cool-down)</strong> เพื่อให้ระบบค่อยๆ เคลียร์โหลดอย่างนุ่มนวล'
+                ],
+                keyProps: ['duration: "30s"', 'target: 50 (จำนวน VUs หรือ RPS เป้าหมาย)']
+            }
+        };
+
+        function selectConcept(key) {
+            const info = conceptDetails[key];
+            const panel = document.getElementById('concept-detail-panel');
+
+            // Update visual highlight on left boxes
+            ['scenario', 'executor', 'stage'].forEach(k => {
+                const el = document.getElementById('box-' + k);
+                el.classList.remove('glow-purple', 'glow-cyan', 'glow-amber', 'ring-2', 'ring-white/40');
+            });
+            const activeBox = document.getElementById('box-' + key);
+            const glowClass = key === 'scenario' ? 'glow-purple' : (key === 'executor' ? 'glow-cyan' : 'glow-amber');
+            activeBox.classList.add(glowClass, 'ring-2', 'ring-white/40');
+
+            const badgeColor = key === 'scenario'
+                ? 'bg-k6-purple/20 text-purple-300 border-k6-purple/40'
+                : (key === 'executor' ? 'bg-k6-cyan/20 text-cyan-300 border-k6-cyan/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40');
+
+            panel.innerHTML = `
+                <div class="space-y-4">
+                    <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-mono border ${badgeColor}">
+                        ${info.badge}
+                    </div>
+                    <h3 class="text-xl font-bold text-white leading-snug">${info.title}</h3>
+                    <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300">
+                        <i class="fa-solid fa-wand-magic-sparkles text-amber-400 mr-1.5"></i> ${info.analogy}
+                    </div>
+                    <ul class="space-y-2.5 text-xs sm:text-sm text-slate-300">
+                        ${info.points.map(p => `<li class="flex items-start space-x-2"><i class="fa-solid fa-check-circle text-emerald-400 mt-1 shrink-0"></i><span>${p}</span></li>`).join('')}
+                    </ul>
+                </div>
+                <div class="pt-4 mt-4 border-t border-slate-800/80">
+                    <div class="text-xs text-slate-400 mb-2">คีย์สำคัญในโค้ด (Key Properties):</div>
+                    <div class="flex flex-wrap gap-1.5">
+                        ${info.keyProps.map(prop => `<span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 font-mono text-xs text-slate-200">${prop}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==========================================
+        // 2. STATE MANAGEMENT FOR SCENARIOS & STAGES
+        // ==========================================
+        let activeScenarioIndex = 1; // 1 or 2
+        let multiScenarioEnabled = false;
+        let currentHighlightedSection = null;
+
+        // Simulation state
+        let simPlaying = false;
+        let simCurrentTime = 0;
+        let simAnimationFrame = null;
+        let lastFrameTimestamp = 0;
+        let hoverTimeSec = null;
+
+        let scenariosState = {
+            1: {
+                name: 'checkout_flow',
+                startTime: 0,
+                executor: 'ramping-vus',
+                startVUs: 0,
+                stages: [
+                    { duration: 15, target: 40, note: 'Ramp-up (ไต่ระดับคนเข้า)' },
+                    { duration: 30, target: 40, note: 'Steady State (คงที่ดูความเสถียร)' },
+                    { duration: 15, target: 0,  note: 'Ramp-down (ค่อยๆ ถอนคนออก)' }
+                ],
+                // For non-stage executors
+                constantVUs: 30,
+                constantRate: 45,
+                constantDuration: 50,
+                iterationsPerVU: 10,
+                preAllocatedVUs: 50,
+                maxVUs: 150
+            },
+            2: {
+                name: 'flash_sale_spike',
+                startTime: 15,
+                executor: 'ramping-arrival-rate',
+                startVUs: 10,
+                stages: [
+                    { duration: 10, target: 90, note: 'Flash Spike! พุ่งทะลัก' },
+                    { duration: 15, target: 90, note: 'แช่ช่วงโปรโมชั่น' },
+                    { duration: 10, target: 10, note: 'กลับสู่สภาวะปกติ' }
+                ],
+                constantVUs: 20,
+                constantRate: 30,
+                constantDuration: 40,
+                iterationsPerVU: 8,
+                preAllocatedVUs: 60,
+                maxVUs: 200
+            }
+        };
+
+        // Helper: Does this executor use stages?
+        function usesStages(executor) {
+            return executor === 'ramping-vus' || executor === 'ramping-arrival-rate';
+        }
+
+        function isArrivalRate(executor) {
+            return executor === 'ramping-arrival-rate' || executor === 'constant-arrival-rate';
+        }
+
+        // ==========================================
+        // 3. PRESET PROFILES
+        // ==========================================
+        function applyPreset(presetName) {
+            stopSimulation();
+            const presetBtns = ['smoke', 'load', 'stress', 'spike', 'multi'];
+            presetBtns.forEach(p => {
+                const btn = document.getElementById('preset-' + p);
+                if (p === presetName) {
+                    btn.className = 'px-3 py-1.5 rounded-lg text-xs font-medium bg-k6-purple text-white border border-purple-400 transition flex items-center space-x-1.5 shadow-lg shadow-k6-purple/25';
+                } else {
+                    btn.className = 'px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center space-x-1.5';
+                }
+            });
+
+            const expEl = document.getElementById('preset-explanation');
+
+            if (presetName === 'smoke') {
+                multiScenarioEnabled = false;
+                activeScenarioIndex = 1;
+                scenariosState[1] = {
+                    ...scenariosState[1],
+                    name: 'smoke_test_check',
+                    startTime: 0,
+                    executor: 'constant-vus',
+                    constantVUs: 5,
+                    constantDuration: 30
+                };
+                expEl.textContent = 'Smoke Test: ใช้ constant-vus จำนวนน้อยๆ (5 VUs) รันสั้นๆ เพื่อเช็คว่าสคริปต์และระบบไม่พัง (ไม่ใช้ Stage)';
+            } else if (presetName === 'load') {
+                multiScenarioEnabled = false;
+                activeScenarioIndex = 1;
+                scenariosState[1] = {
+                    ...scenariosState[1],
+                    name: 'average_load_test',
+                    startTime: 0,
+                    executor: 'ramping-vus',
+                    startVUs: 0,
+                    stages: [
+                        { duration: 15, target: 40, note: 'Ramp-up ไต่ระดับ' },
+                        { duration: 30, target: 40, note: 'Hold แช่โหลดคงที่' },
+                        { duration: 15, target: 0,  note: 'Ramp-down ลดระดับ' }
+                    ]
+                };
+                expEl.textContent = 'Average Load: รูปทรงคางหมูมาตรฐาน ไต่ขึ้น -> แช่ดูความเสถียร -> ไต่ลง ด้วย ramping-vus';
+            } else if (presetName === 'stress') {
+                multiScenarioEnabled = false;
+                activeScenarioIndex = 1;
+                scenariosState[1] = {
+                    ...scenariosState[1],
+                    name: 'step_stress_test',
+                    startTime: 0,
+                    executor: 'ramping-vus',
+                    startVUs: 0,
+                    stages: [
+                        { duration: 10, target: 30, note: 'Step 1: โหลดปกติ' },
+                        { duration: 10, target: 30, note: 'Hold Step 1' },
+                        { duration: 10, target: 70, note: 'Step 2: โหลดหนัก' },
+                        { duration: 10, target: 70, note: 'Hold Step 2' },
+                        { duration: 10, target: 110, note: 'Step 3: จุดคอขวด' },
+                        { duration: 10, target: 0, note: 'Cool-down' }
+                    ]
+                };
+                expEl.textContent = 'Stress Test: ไต่ระดับเป็นขั้นบันได (Step Ramp) เพื่อหาว่าที่กี่ VUs ระบบจะเริ่มช้าหรือ Error';
+            } else if (presetName === 'spike') {
+                multiScenarioEnabled = false;
+                activeScenarioIndex = 1;
+                scenariosState[1] = {
+                    ...scenariosState[1],
+                    name: 'flash_sale_spike',
+                    startTime: 0,
+                    executor: 'ramping-arrival-rate',
+                    startVUs: 10,
+                    preAllocatedVUs: 80,
+                    maxVUs: 200,
+                    stages: [
+                        { duration: 15, target: 15, note: 'ทราฟฟิกปกติก่อนเริ่มโปรฯ' },
+                        { duration: 5,  target: 120, note: 'Spike! คนแห่กดพร้อมกันใน 5 วิ' },
+                        { duration: 15, target: 120, note: 'ช่วงพีคของ Flash Sale' },
+                        { duration: 10, target: 15, note: 'ของหมด ทราฟฟิกลดลง' },
+                        { duration: 10, target: 0,  note: 'จบการทดสอบ' }
+                    ]
+                };
+                expEl.textContent = 'Spike Test: ใช้ ramping-arrival-rate เร่งอัตรา RPS พุ่งชันในเวลาสั้นๆ เพื่อดูระบบ Auto-scaling';
+            } else if (presetName === 'multi') {
+                multiScenarioEnabled = true;
+                activeScenarioIndex = 1;
+                scenariosState[1] = {
+                    ...scenariosState[1],
+                    name: 'background_browsing',
+                    startTime: 0,
+                    executor: 'constant-vus',
+                    constantVUs: 25,
+                    constantDuration: 60
+                };
+                scenariosState[2] = {
+                    ...scenariosState[2],
+                    name: 'midnight_flash_sale',
+                    startTime: 15,
+                    executor: 'ramping-vus',
+                    startVUs: 0,
+                    stages: [
+                        { duration: 10, target: 75, note: 'ลูกค้า VIP แห่เข้าตอนวินาทีที่ 15' },
+                        { duration: 20, target: 75, note: 'แย่งกดสั่งซื้อ' },
+                        { duration: 10, target: 0,  note: 'ออกจากหน้าชำระเงิน' }
+                    ]
+                };
+                expEl.textContent = 'Multi-Scenario: รัน 2 Scenarios ซ้อนกัน! Scenario 1 แช่คนดูเว็บนิ่งๆ + Scenario 2 เริ่มที่วินาทีที่ 15 พุ่งขึ้นมาสมทบ';
+            }
+
+            document.getElementById('multi-scenario-toggle').checked = multiScenarioEnabled;
+            syncUIWithState();
+        }
+
+        function quickTryExecutor(executorType) {
+            stopSimulation();
+            const sc = scenariosState[activeScenarioIndex];
+            sc.executor = executorType;
+            if (usesStages(executorType) && (!sc.stages || sc.stages.length === 0)) {
+                sc.stages = [
+                    { duration: 15, target: 40, note: 'Ramp-up' },
+                    { duration: 25, target: 40, note: 'Steady' },
+                    { duration: 15, target: 0, note: 'Ramp-down' }
+                ];
+            }
+            syncUIWithState();
+            document.getElementById('playground-section').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // ==========================================
+        // 4. UI SYNCHRONIZATION & CONTROLS
+        // ==========================================
+        function switchScenarioTab(index) {
+            activeScenarioIndex = index;
+            syncUIWithState();
+        }
+
+        function toggleSecondScenario(checked) {
+            multiScenarioEnabled = checked;
+            if (!checked && activeScenarioIndex === 2) {
+                activeScenarioIndex = 1;
+            }
+            syncUIWithState();
+        }
+
+        function onExecutorChange(newExecutor) {
+            const sc = scenariosState[activeScenarioIndex];
+            sc.executor = newExecutor;
+            syncUIWithState();
+        }
+
+        function updateCurrentScenarioConfig() {
+            const sc = scenariosState[activeScenarioIndex];
+            const rawName = document.getElementById('input-scenario-name').value.trim();
+            sc.name = rawName.replace(/[^a-zA-Z0-9_]/g, '_') || ('scenario_' + activeScenarioIndex);
+            sc.startTime = parseInt(document.getElementById('input-start-time').value, 10) || 0;
+            document.getElementById('label-start-time').textContent = sc.startTime + 's';
+            document.getElementById('tab-sc' + activeScenarioIndex + '-label').textContent = sc.name;
+
+            renderGraph();
+            renderCode();
+        }
+
+        function syncUIWithState() {
+            const sc = scenariosState[activeScenarioIndex];
+
+            // Update Scenario Tabs
+            const tab1 = document.getElementById('tab-sc1');
+            const tab2 = document.getElementById('tab-sc2');
+            document.getElementById('tab-sc1-label').textContent = scenariosState[1].name;
+            document.getElementById('tab-sc2-label').textContent = scenariosState[2].name;
+
+            if (multiScenarioEnabled) {
+                tab2.classList.remove('hidden');
+                tab2.classList.add('flex');
+                document.getElementById('legend-sc2-wrap').classList.remove('hidden');
+                document.getElementById('legend-sc2-wrap').classList.add('inline-flex');
+            } else {
+                tab2.classList.add('hidden');
+                tab2.classList.remove('flex');
+                document.getElementById('legend-sc2-wrap').classList.add('hidden');
+                document.getElementById('legend-sc2-wrap').classList.remove('inline-flex');
+            }
+
+            if (activeScenarioIndex === 1) {
+                tab1.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-k6-purple text-white flex items-center space-x-1.5 shadow';
+                tab2.className = (multiScenarioEnabled ? 'flex ' : 'hidden ') + 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-emerald-400 border border-emerald-500/30 items-center space-x-1.5';
+            } else {
+                tab1.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-purple-300 border border-purple-500/30 flex items-center space-x-1.5';
+                tab2.className = 'flex px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950 items-center space-x-1.5 shadow';
+            }
+
+            // Populate Scenario Inputs
+            document.getElementById('input-scenario-name').value = sc.name;
+            document.getElementById('input-start-time').value = sc.startTime;
+            document.getElementById('label-start-time').textContent = sc.startTime + 's';
+
+            // Populate Executor Select
+            document.getElementById('select-executor').value = sc.executor;
+
+            // Update Executor Relationship Banner
+            const relBanner = document.getElementById('executor-relationship-banner');
+            const yBadge = document.getElementById('graph-y-unit-badge');
+            const unitText = isArrivalRate(sc.executor) ? 'RPS (รอบ/วินาที)' : 'VUs (คน)';
+            yBadge.textContent = 'แกน Y: ' + unitText;
+
+            if (usesStages(sc.executor)) {
+                relBanner.innerHTML = `
+                    <div class="flex items-start space-x-2">
+                        <i class="fa-solid fa-link text-emerald-400 mt-0.5"></i>
+                        <div>
+                            <span class="text-emerald-300 font-semibold">เชื่อมโยงกับ Stages โดยตรง:</span>
+                            เพราะคุณเลือก <code class="text-cyan-300 font-mono">${sc.executor}</code> คุณจึงสามารถกำหนด <strong>Stages</strong> ด้านล่างเพื่อสั่งให้กราฟไต่ระดับขึ้น-ลงตามเวลาได้
+                        </div>
+                    </div>
+                `;
+            } else {
+                relBanner.innerHTML = `
+                    <div class="flex items-start space-x-2">
+                        <i class="fa-solid fa-ban text-amber-400 mt-0.5"></i>
+                        <div>
+                            <span class="text-amber-300 font-semibold">ไม่ใช้ Stages:</span>
+                            เพราะ <code class="text-cyan-300 font-mono">${sc.executor}</code> เป็นเครื่องยนต์แบบคงที่ กราฟจะเป็นแท่งสี่เหลี่ยมแช่ยาวตามเวลา <code class="text-amber-200 font-mono">duration</code> โดยไม่มีการไต่ระดับ
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderStageBuilder();
+            renderGraph();
+            renderCode();
+        }
+
+        function renderStageBuilder() {
+            const sc = scenariosState[activeScenarioIndex];
+            const container = document.getElementById('stage-builder-container');
+            const targetUnit = isArrivalRate(sc.executor) ? 'RPS' : 'VUs';
+
+            if (usesStages(sc.executor)) {
+                let stagesHTML = sc.stages.map((st, idx) => {
+                    const prevTarget = idx === 0 ? (sc.startVUs || 0) : sc.stages[idx - 1].target;
+                    let stageBadge = '';
+                    if (st.target > prevTarget) {
+                        stageBadge = '<span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px]">↗ Ramp-up</span>';
+                    } else if (st.target < prevTarget) {
+                        stageBadge = '<span class="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 text-[10px]">↘ Ramp-down</span>';
+                    } else {
+                        stageBadge = '<span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[10px]">→ Hold คงที่</span>';
+                    }
+
+                    return `
+                        <div class="p-2.5 rounded-lg bg-slate-900/95 border border-slate-800 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-xs font-mono font-bold text-amber-400">Stage #${idx + 1}</span>
+                                    ${stageBadge}
+                                    <span class="text-[11px] text-slate-400">(${prevTarget} → ${st.target} ${targetUnit})</span>
+                                </div>
+                                ${sc.stages.length > 1 ? `
+                                    <button onclick="removeStage(${idx})" class="text-slate-500 hover:text-rose-400 text-xs px-1" title="ลบ Stage นี้">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <div class="flex justify-between text-[11px] text-slate-400 mb-0.5">
+                                        <span>เวลา (duration)</span>
+                                        <span class="font-mono text-amber-300">${st.duration}s</span>
+                                    </div>
+                                    <input type="range" min="5" max="60" step="5" value="${st.duration}"
+                                        oninput="updateStageValue(${idx}, 'duration', this.value)" class="w-full">
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] text-slate-400 mb-0.5">
+                                        <span>เป้าหมาย (target)</span>
+                                        <span class="font-mono text-amber-300">${st.target} ${targetUnit}</span>
+                                    </div>
+                                    <input type="range" min="0" max="150" step="5" value="${st.target}"
+                                        oninput="updateStageValue(${idx}, 'target', this.value)" class="w-full">
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                container.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center">
+                            <span class="w-5 h-5 rounded bg-k6-amber text-slate-950 inline-flex items-center justify-center text-[11px] mr-2 font-bold">3</span>
+                            ตั้งค่า Stages (${sc.stages.length} สเต็ป)
+                        </span>
+                        <button onclick="addStage()" class="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-medium transition flex items-center space-x-1">
+                            <i class="fa-solid fa-plus"></i><span>เพิ่ม Stage</span>
+                        </button>
+                    </div>
+                    <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        ${stagesHTML}
+                    </div>
+                `;
+            } else if (sc.executor === 'constant-vus' || sc.executor === 'constant-arrival-rate') {
+                const isRate = sc.executor === 'constant-arrival-rate';
+                const val = isRate ? sc.constantRate : sc.constantVUs;
+                const propName = isRate ? 'rate (จำนวนรอบต่อวินาที)' : 'vus (จำนวนคนคงที่)';
+                const fieldKey = isRate ? 'constantRate' : 'constantVUs';
+
+                container.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center">
+                            <span class="w-5 h-5 rounded bg-k6-amber text-slate-950 inline-flex items-center justify-center text-[11px] mr-2 font-bold">3</span>
+                            พารามิเตอร์แบบคงที่ (แทนการใช้ Stages)
+                        </span>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-900/95 border border-slate-800 space-y-3">
+                        <div>
+                            <div class="flex justify-between text-xs text-slate-300 mb-1">
+                                <span>กำหนดค่า <code class="text-amber-300 font-mono">${propName}</code></span>
+                                <span class="font-mono font-bold text-amber-300">${val} ${targetUnit}</span>
+                            </div>
+                            <input type="range" min="5" max="150" step="5" value="${val}"
+                                oninput="updateFixedParam('${fieldKey}', this.value)" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs text-slate-300 mb-1">
+                                <span>ระยะเวลารันทั้งหมด (<code class="text-amber-300 font-mono">duration</code>)</span>
+                                <span class="font-mono font-bold text-amber-300">${sc.constantDuration}s</span>
+                            </div>
+                            <input type="range" min="10" max="90" step="5" value="${sc.constantDuration}"
+                                oninput="updateFixedParam('constantDuration', this.value)" class="w-full">
+                        </div>
+                    </div>
+                `;
+            } else if (sc.executor === 'per-vu-iterations') {
+                container.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center">
+                            <span class="w-5 h-5 rounded bg-k6-amber text-slate-950 inline-flex items-center justify-center text-[11px] mr-2 font-bold">3</span>
+                            กำหนดจำนวนคนและจำนวนรอบ (ไม่ใช้ Stages)
+                        </span>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-900/95 border border-slate-800 space-y-3">
+                        <div>
+                            <div class="flex justify-between text-xs text-slate-300 mb-1">
+                                <span>จำนวนคนพร้อมกัน (<code class="text-amber-300 font-mono">vus</code>)</span>
+                                <span class="font-mono font-bold text-amber-300">${sc.constantVUs} VUs</span>
+                            </div>
+                            <input type="range" min="5" max="120" step="5" value="${sc.constantVUs}"
+                                oninput="updateFixedParam('constantVUs', this.value)" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs text-slate-300 mb-1">
+                                <span>จำนวนรอบต่อคน (<code class="text-amber-300 font-mono">iterations</code>)</span>
+                                <span class="font-mono font-bold text-amber-300">${sc.iterationsPerVU} รอบ/คน</span>
+                            </div>
+                            <input type="range" min="1" max="30" step="1" value="${sc.iterationsPerVU}"
+                                oninput="updateFixedParam('iterationsPerVU', this.value)" class="w-full">
+                        </div>
+                        <p class="text-[11px] text-slate-400">
+                            รวมทั้งหมดจะเกิด <strong>${sc.constantVUs * sc.iterationsPerVU} iterations</strong> เมื่อครบแล้วจะหยุดทันที
+                        </p>
+                    </div>
+                `;
+            }
+        }
+
+        function updateStageValue(stageIdx, key, val) {
+            const sc = scenariosState[activeScenarioIndex];
+            sc.stages[stageIdx][key] = parseInt(val, 10);
+            renderStageBuilder();
+            renderGraph();
+            renderCode();
+        }
+
+        function addStage() {
+            const sc = scenariosState[activeScenarioIndex];
+            const lastTarget = sc.stages.length > 0 ? sc.stages[sc.stages.length - 1].target : 30;
+            sc.stages.push({
+                duration: 15,
+                target: lastTarget === 0 ? 50 : 0,
+                note: 'Stage ใหม่'
+            });
+            renderStageBuilder();
+            renderGraph();
+            renderCode();
+        }
+
+        function removeStage(idx) {
+            const sc = scenariosState[activeScenarioIndex];
+            if (sc.stages.length <= 1) return;
+            sc.stages.splice(idx, 1);
+            renderStageBuilder();
+            renderGraph();
+            renderCode();
+        }
+
+        function updateFixedParam(key, val) {
+            const sc = scenariosState[activeScenarioIndex];
+            sc[key] = parseInt(val, 10);
+            renderStageBuilder();
+            renderGraph();
+            renderCode();
+        }
+
+        // ==========================================
+        // 5. TIMELINE & LOAD CALCULATION ENGINE
+        // ==========================================
+        function getScenarioDuration(sc) {
+            if (usesStages(sc.executor)) {
+                return sc.stages.reduce((acc, s) => acc + s.duration, 0);
+            } else if (sc.executor === 'per-vu-iterations') {
+                // Estimate 2 seconds per iteration for visualization
+                return Math.max(10, sc.iterationsPerVU * 2);
+            } else {
+                return sc.constantDuration;
+            }
+        }
+
+        function getTotalTimelineSeconds() {
+            const end1 = scenariosState[1].startTime + getScenarioDuration(scenariosState[1]);
+            const end2 = multiScenarioEnabled ? (scenariosState[2].startTime + getScenarioDuration(scenariosState[2])) : 0;
+            return Math.max(20, end1, end2);
+        }
+
+        // Returns { value, statusText } at time t (seconds) for a given scenario
+        function evaluateScenarioAtTime(sc, t) {
+            const relT = t - sc.startTime;
+            const totalDur = getScenarioDuration(sc);
+
+            if (relT < 0) {
+                return { value: 0, status: `รอเริ่มที่ ${sc.startTime}s` };
+            }
+            if (relT > totalDur) {
+                return { value: 0, status: 'จบการทำงานแล้ว' };
+            }
+
+            if (usesStages(sc.executor)) {
+                let elapsed = 0;
+                let prevTarget = sc.startVUs || 0;
+                for (let i = 0; i < sc.stages.length; i++) {
+                    const st = sc.stages[i];
+                    if (relT <= elapsed + st.duration) {
+                        const progress = st.duration === 0 ? 1 : (relT - elapsed) / st.duration;
+                        const currentVal = prevTarget + (st.target - prevTarget) * progress;
+                        let action = 'คงที่ (Hold)';
+                        if (st.target > prevTarget) action = `กำลังไต่ขึ้น (${prevTarget}→${st.target})`;
+                        if (st.target < prevTarget) action = `กำลังลดระดับ (${prevTarget}→${st.target})`;
+                        return {
+                            value: Math.round(currentVal),
+                            status: `Stage #${i + 1}: ${action}`
+                        };
+                    }
+                    elapsed += st.duration;
+                    prevTarget = st.target;
+                }
+                return { value: 0, status: 'เสร็จสิ้นทุก Stage' };
+            } else if (sc.executor === 'constant-vus') {
+                return { value: sc.constantVUs, status: `แช่คงที่ ${sc.constantVUs} VUs` };
+            } else if (sc.executor === 'constant-arrival-rate') {
+                return { value: sc.constantRate, status: `ยิงคงที่ ${sc.constantRate} RPS` };
+            } else if (sc.executor === 'per-vu-iterations') {
+                return { value: sc.constantVUs, status: `เร่งทำคนละ ${sc.iterationsPerVU} รอบ` };
+            }
+            return { value: 0, status: '-' };
+        }
+
+        function getKeyframesForScenario(sc) {
+            const pts = [];
+            const start = sc.startTime;
+            if (usesStages(sc.executor)) {
+                let t = start;
+                pts.push({ t: t, v: sc.startVUs || 0, stageIdx: 0 });
+                sc.stages.forEach((st, i) => {
+                    t += st.duration;
+                    pts.push({ t: t, v: st.target, stageIdx: i + 1 });
+                });
+            } else {
+                const dur = getScenarioDuration(sc);
+                const val = sc.executor === 'constant-arrival-rate' ? sc.constantRate : sc.constantVUs;
+                pts.push({ t: start, v: val, stageIdx: 1 });
+                pts.push({ t: start + dur, v: val, stageIdx: 1 });
+            }
+            return pts;
+        }
+
+        // ==========================================
+        // 6. INTERACTIVE CANVAS GRAPH RENDERER
+        // ==========================================
+        function renderGraph() {
+            const canvas = document.getElementById('loadChartCanvas');
+            if (!canvas) return;
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+
+            const width = rect.width;
+            const height = rect.height;
+            const padLeft = 48;
+            const padRight = 24;
+            const padTop = 24;
+            const padBottom = 34;
+            const plotW = width - padLeft - padRight;
+            const plotH = height - padTop - padBottom;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const maxTime = getTotalTimelineSeconds();
+
+            // Determine max Y value
+            let maxY = 50;
+            for (let s = 0; s <= maxTime; s++) {
+                const v1 = evaluateScenarioAtTime(scenariosState[1], s).value;
+                const v2 = multiScenarioEnabled ? evaluateScenarioAtTime(scenariosState[2], s).value : 0;
+                maxY = Math.max(maxY, v1, v2, v1 + v2);
+            }
+            maxY = Math.ceil((maxY * 1.15) / 10) * 10;
+
+            const toX = (t) => padLeft + (t / maxTime) * plotW;
+            const toY = (v) => padTop + plotH - (v / maxY) * plotH;
+
+            // Draw Horizontal Grid Lines & Y Labels
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
+            ctx.lineWidth = 1;
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px JetBrains Mono';
+            ctx.textAlign = 'right';
+
+            const yTicks = 5;
+            for (let i = 0; i <= yTicks; i++) {
+                const val = Math.round((maxY / yTicks) * i);
+                const y = toY(val);
+                ctx.beginPath();
+                ctx.moveTo(padLeft, y);
+                ctx.lineTo(width - padRight, y);
+                ctx.stroke();
+                ctx.fillText(val, padLeft - 8, y + 4);
+            }
+
+            // Draw Vertical Stage Boundary Lines for active scenario
+            const activeSc = scenariosState[activeScenarioIndex];
+            if (usesStages(activeSc.executor)) {
+                let accT = activeSc.startTime;
+                activeSc.stages.forEach((st, idx) => {
+                    accT += st.duration;
+                    const x = toX(accT);
+                    ctx.save();
+                    ctx.setLineDash([4, 4]);
+                    ctx.strokeStyle = 'rgba(245, 158, 11, 0.35)';
+                    ctx.beginPath();
+                    ctx.moveTo(x, padTop);
+                    ctx.lineTo(x, padTop + plotH);
+                    ctx.stroke();
+
+                    // Stage label at top
+                    const prevX = toX(accT - st.duration);
+                    const midX = (prevX + x) / 2;
+                    if (x - prevX > 36) {
+                        ctx.fillStyle = '#fcd34d';
+                        ctx.textAlign = 'center';
+                        ctx.font = '10px Prompt';
+                        ctx.fillText(`Stage ${idx + 1}`, midX, padTop - 6);
+                    }
+                    ctx.restore();
+                });
+            }
+
+            // Draw X-Axis Time Labels
+            ctx.fillStyle = '#94a3b8';
+            ctx.textAlign = 'center';
+            ctx.font = '11px JetBrains Mono';
+            const xStep = maxTime <= 30 ? 5 : (maxTime <= 60 ? 10 : 15);
+            for (let t = 0; t <= maxTime; t += xStep) {
+                const x = toX(t);
+                ctx.fillText(t + 's', x, height - 10);
+            }
+
+            // Helper function to draw a scenario curve
+            function drawScenarioCurve(sc, strokeColor, fillTop, fillBottom) {
+                ctx.save();
+                ctx.beginPath();
+                for (let step = 0; step <= maxTime * 2; step++) {
+                    const t = step / 2;
+                    const val = evaluateScenarioAtTime(sc, t).value;
+                    const x = toX(t);
+                    const y = toY(val);
+                    if (step === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.strokeStyle = strokeColor;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Fill under curve
+                ctx.lineTo(toX(maxTime), toY(0));
+                ctx.lineTo(toX(0), toY(0));
+                ctx.closePath();
+                const grad = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
+                grad.addColorStop(0, fillTop);
+                grad.addColorStop(1, fillBottom);
+                ctx.fillStyle = grad;
+                ctx.fill();
+                ctx.restore();
+
+                // Draw keyframe target dots
+                const pts = getKeyframesForScenario(sc);
+                pts.forEach(pt => {
+                    const x = toX(pt.t);
+                    const y = toY(pt.v);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.fill();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#0f172a';
+                    ctx.stroke();
+                });
+            }
+
+            // Draw Scenario 1 (Purple)
+            drawScenarioCurve(
+                scenariosState[1],
+                '#7d64ff',
+                'rgba(125, 100, 255, 0.38)',
+                'rgba(125, 100, 255, 0.02)'
+            );
+
+            // Draw Scenario 2 if enabled (Emerald)
+            if (multiScenarioEnabled) {
+                drawScenarioCurve(
+                    scenariosState[2],
+                    '#10b981',
+                    'rgba(16, 185, 129, 0.35)',
+                    'rgba(16, 185, 129, 0.02)'
+                );
+            }
+
+            //Update Legends
+            document.getElementById('legend-sc1').textContent = `${scenariosState[1].name} (${scenariosState[1].executor})`;
+            if (multiScenarioEnabled) {
+                document.getElementById('legend-sc2').textContent = `${scenariosState[2].name} (${scenariosState[2].executor})`;
+            }
+
+            // Draw Playhead or Hover Cursor
+            const focusTime = simPlaying ? simCurrentTime : hoverTimeSec;
+            if (focusTime !== null && focusTime >= 0 && focusTime <= maxTime) {
+                const cx = toX(focusTime);
+                ctx.save();
+                ctx.strokeStyle = '#00d2ff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(cx, padTop);
+                ctx.lineTo(cx, padTop + plotH);
+                ctx.stroke();
+
+                const eval1 = evaluateScenarioAtTime(scenariosState[1], focusTime);
+                const cy1 = toY(eval1.value);
+                ctx.beginPath();
+                ctx.arc(cx, cy1, 6, 0, Math.PI * 2);
+                ctx.fillStyle = '#00d2ff';
+                ctx.fill();
+
+                ctx.restore();
+                updateTelemetryBar(focusTime);
+            } else {
+                updateTelemetryBar(0);
+            }
+        }
+
+        function updateTelemetryBar(t) {
+            const maxTime = getTotalTimelineSeconds();
+            const sec = Math.round(t);
+            const ev1 = evaluateScenarioAtTime(scenariosState[1], sec);
+            const ev2 = multiScenarioEnabled ? evaluateScenarioAtTime(scenariosState[2], sec) : { value: 0, status: '' };
+            const unit1 = isArrivalRate(scenariosState[1].executor) ? 'RPS' : 'VUs';
+
+            document.getElementById('telemetry-time').textContent = `${sec}s / ${maxTime}s`;
+            document.getElementById('telemetry-val1').textContent = `${ev1.value} ${unit1}`;
+            document.getElementById('telemetry-total').textContent = multiScenarioEnabled
+                ? `${ev1.value + ev2.value} Combined`
+                : `${ev1.value} ${unit1}`;
+            document.getElementById('telemetry-status').textContent = ev1.status;
+        }
+
+        // Mouse / Touch Interaction on Graph Canvas
+        function setupCanvasEvents() {
+            const canvas = document.getElementById('loadChartCanvas');
+            if (!canvas) return;
+
+            function handlePointer(clientX) {
+                const rect = canvas.getBoundingClientRect();
+                const padLeft = 48;
+                const padRight = 24;
+                const plotW = rect.width - padLeft - padRight;
+                const relX = Math.max(0, Math.min(plotW, clientX - rect.left - padLeft));
+                const maxTime = getTotalTimelineSeconds();
+                hoverTimeSec = (relX / plotW) * maxTime;
+                if (!simPlaying) {
+                    renderGraph();
+                }
+            }
+
+            canvas.addEventListener('mousemove', (e) => handlePointer(e.clientX));
+            canvas.addEventListener('mouseleave', () => {
+                hoverTimeSec = null;
+                if (!simPlaying) renderGraph();
+            });
+            canvas.addEventListener('touchmove', (e) => {
+                if (e.touches.length > 0) {
+                    handlePointer(e.touches[0].clientX);
+                }
+            }, { passive: true });
+        }
+
+        // ==========================================
+        // 7. SIMULATION PLAYHEAD ENGINE
+        // ==========================================
+        function toggleSimulation() {
+            if (simPlaying) {
+                stopSimulation();
+            } else {
+                startSimulation();
+            }
+        }
+
+        function startSimulation() {
+            simPlaying = true;
+            const maxTime = getTotalTimelineSeconds();
+            if (simCurrentTime >= maxTime) simCurrentTime = 0;
+
+            document.getElementById('sim-icon').className = 'fa-solid fa-pause';
+            document.getElementById('sim-text').textContent = 'หยุดชั่วคราว';
+            lastFrameTimestamp = performance.now();
+            simAnimationFrame = requestAnimationFrame(simLoop);
+        }
+
+        function stopSimulation() {
+            simPlaying = false;
+            if (simAnimationFrame) cancelAnimationFrame(simAnimationFrame);
+            document.getElementById('sim-icon').className = 'fa-solid fa-play';
+            document.getElementById('sim-text').textContent = 'จำลองการรัน (Simulate)';
+            renderGraph();
+        }
+
+        function resetSimulation() {
+            stopSimulation();
+            simCurrentTime = 0;
+            hoverTimeSec = null;
+            renderGraph();
+        }
+
+        function simLoop(timestamp) {
+            if (!simPlaying) return;
+            const dt = (timestamp - lastFrameTimestamp) / 1000;
+            lastFrameTimestamp = timestamp;
+
+            const maxTime = getTotalTimelineSeconds();
+            // Speed up 6x so a 60s test takes 10 seconds to watch
+            simCurrentTime += dt * 6;
+
+            if (simCurrentTime >= maxTime) {
+                simCurrentTime = maxTime;
+                renderGraph();
+                stopSimulation();
+                return;
+            }
+
+            renderGraph();
+            simAnimationFrame = requestAnimationFrame(simLoop);
+        }
+
+        // ==========================================
+        // 8. LIVE K6 CODE GENERATOR & HIGHLIGHTING
+        // ==========================================
+        function buildScenarioCodeSnippet(sc) {
+            const sClass = currentHighlightedSection === 'scenario' ? 'code-highlight-scenario' : '';
+            const eClass = currentHighlightedSection === 'executor' ? 'code-highlight-executor' : '';
+            const stClass = currentHighlightedSection === 'stage' ? 'code-highlight-stage' : '';
+
+            let innerProps = '';
+            if (sc.executor === 'ramping-vus') {
+                const stagesLines = sc.stages.map(st =>
+                    `        { duration: '${st.duration}s', target: ${st.target} }, // ${st.note || 'ปรับจำนวน VUs'}`
+                ).join('\n');
+                innerProps = `<div class="${eClass} px-2 rounded">      executor: <span class="text-cyan-300">'ramping-vus'</span>,
+      startVUs: <span class="text-emerald-300">${sc.startVUs || 0}</span>,</div><div class="${stClass} px-2 rounded">      stages: [
+${stagesLines}
+      ],</div>`;
+            } else if (sc.executor === 'ramping-arrival-rate') {
+                const stagesLines = sc.stages.map(st =>
+                    `        { duration: '${st.duration}s', target: ${st.target} }, // เป้าหมาย ${st.target} RPS`
+                ).join('\n');
+                innerProps = `<div class="${eClass} px-2 rounded">      executor: <span class="text-cyan-300">'ramping-arrival-rate'</span>,
+      startRate: <span class="text-emerald-300">${sc.startVUs || 10}</span>,
+      timeUnit: <span class="text-amber-300">'1s'</span>,
+      preAllocatedVUs: <span class="text-emerald-300">${sc.preAllocatedVUs || 50}</span>,
+      maxVUs: <span class="text-emerald-300">${sc.maxVUs || 200}</span>,</div><div class="${stClass} px-2 rounded">      stages: [
+${stagesLines}
+      ],</div>`;
+            } else if (sc.executor === 'constant-vus') {
+                innerProps = `<div class="${eClass} px-2 rounded">      executor: <span class="text-cyan-300">'constant-vus'</span>,</div><div class="${stClass} px-2 rounded">      vus: <span class="text-amber-300">${sc.constantVUs}</span>,
+      duration: <span class="text-amber-300">'${sc.constantDuration}s'</span>, // แช่คงที่ ไม่ใช้ stages</div>`;
+            } else if (sc.executor === 'constant-arrival-rate') {
+                innerProps = `<div class="${eClass} px-2 rounded">      executor: <span class="text-cyan-300">'constant-arrival-rate'</span>,</div><div class="${stClass} px-2 rounded">      rate: <span class="text-amber-300">${sc.constantRate}</span>,
+      timeUnit: <span class="text-amber-300">'1s'</span>,
+      duration: <span class="text-amber-300">'${sc.constantDuration}s'</span>,
+      preAllocatedVUs: <span class="text-emerald-300">50</span>,
+      maxVUs: <span class="text-emerald-300">150</span>,</div>`;
+            } else if (sc.executor === 'per-vu-iterations') {
+                innerProps = `<div class="${eClass} px-2 rounded">      executor: <span class="text-cyan-300">'per-vu-iterations'</span>,</div><div class="${stClass} px-2 rounded">      vus: <span class="text-amber-300">${sc.constantVUs}</span>,
+      iterations: <span class="text-amber-300">${sc.iterationsPerVU}</span>, // รันครบ ${sc.iterationsPerVU} รอบต่อคนแล้วจบ</div>`;
+            }
+
+            return `<div class="${sClass} py-1 px-2 rounded">    <span class="text-purple-300 font-bold">${sc.name}</span>: {
+      startTime: <span class="text-purple-300">'${sc.startTime}s'</span>,
+${innerProps}    },</div>`;
+        }
+
+        function renderCode() {
+            const codeBlock = document.getElementById('generated-code-block');
+            const sc1Code = buildScenarioCodeSnippet(scenariosState[1]);
+            const sc2Code = multiScenarioEnabled ? '\n' + buildScenarioCodeSnippet(scenariosState[2]) : '';
+
+            codeBlock.innerHTML = `<span class="text-slate-500">import http from 'k6/http';</span>
+
+<span class="text-purple-400">export const</span> options = {
+  scenarios: {
+${sc1Code}${sc2Code}
+  },
+};
+
+<span class="text-purple-400">export default function</span> () {
+  http.get(<span class="text-emerald-300">'https://test-api.k6.io/public/crocodiles/'</span>);
+}`;
+        }
+
+        function highlightCodeSection(section) {
+            currentHighlightedSection = section;
+            renderCode();
+        }
+
+        function clearCodeHighlight() {
+            currentHighlightedSection = null;
+            renderCode();
+        }
+
+        function copyGeneratedCode() {
+            const codeEl = document.getElementById('generated-code-block');
+            const rawText = codeEl.innerText;
+            const textarea = document.createElement('textarea');
+            textarea.value = rawText;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            const toast = document.getElementById('copy-toast');
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 2000);
+        }
+
+        // ==========================================
+        // 9. INTERACTIVE QUIZ VALIDATION
+        // ==========================================
+        const quizSolutions = {
+            1: {
+                correct: 'b',
+                explanation: 'ถูกต้อง! การจำลองคนทะลักขึ้น-ลงตามช่วงเวลา ต้องใช้ Executor ตระกูล Ramping (เช่น ramping-vus) จึงจะสามารถกำหนด stages ย่อยได้'
+            },
+            2: {
+                correct: 'a',
+                explanation: 'ถูกต้อง! การคุมจำนวน Request ต่อวินาที (RPS) ให้คงที่ตาม SLA ต้องใช้ constant-arrival-rate คู่กับ rate และ duration'
+            },
+            3: {
+                correct: 'b',
+                explanation: 'ถูกต้อง! ใน k6 เราสามารถแยกพฤติกรรมเป็น 2 Scenarios ในไฟล์เดียวกัน และใช้ startTime: "20s" เพื่อหน่วงให้ Scenario ที่สองเริ่มตามหลังได้ทันที'
+            }
+        };
+
+        function checkQuiz(qNum, answer, btnEl) {
+            const sol = quizSolutions[qNum];
+            const fb = document.getElementById('quiz-feedback-' + qNum);
+            fb.classList.remove('hidden');
+
+            // Reset sibling button styles
+            const parent = btnEl.parentElement;
+            parent.querySelectorAll('button').forEach(b => {
+                b.className = 'w-full text-left p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition';
+            });
+
+            if (answer === sol.correct) {
+                btnEl.className = 'w-full text-left p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-xs text-emerald-200 font-medium';
+                fb.className = 'p-2.5 rounded-lg text-xs bg-emerald-950/60 border border-emerald-500/40 text-emerald-300';
+                fb.innerHTML = `<i class="fa-solid fa-circle-check mr-1"></i> ${sol.explanation}`;
+            } else {
+                btnEl.className = 'w-full text-left p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/50 text-xs text-rose-200';
+                fb.className = 'p-2.5 rounded-lg text-xs bg-rose-950/60 border border-rose-500/40 text-rose-300';
+                fb.innerHTML = `<i class="fa-solid fa-circle-xmark mr-1"></i> ยังไม่ถูก ลองดูความสัมพันธ์ระหว่าง Executor กับ Stage อีกครั้งครับ!`;
+            }
+        }
+
+        // ==========================================
+        // 10. INITIALIZATION ON WINDOW LOAD
+        // ==========================================
+        window.onload = function () {
+            selectConcept('scenario');
+            setupCanvasEvents();
+            applyPreset('load');
+
+            window.addEventListener('resize', () => {
+                renderGraph();
+            });
+        };
+    </script>
+</body>
+</html>
