@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYROX งบ 0 บาท · สวนจตุจักร Edition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0e1014; --panel:#14181f; --card:#1b2029; --line:#2a313d;
+  --text:#eef2f7; --muted:#97a2b2; --accent:#ff6b2c;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:'Kanit',system-ui,sans-serif}
+button,select{font-family:inherit}
+.app{display:grid;grid-template-columns:1fr 420px;height:100vh}
+#stage{position:relative;overflow:hidden;min-height:0}
+#stage canvas{display:block;width:100%;height:100%;cursor:grab}
+#stage canvas:active{cursor:grabbing}
+
+/* ---------- overlays on 3D ---------- */
+.glass{background:rgba(14,16,20,.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:16px}
+.ov-top{position:absolute;left:16px;top:16px;padding:12px 16px;max-width:min(70%,460px)}
+.chip{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;color:var(--muted);letter-spacing:.3px}
+.chip .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+.ov-name{font-size:1.6rem;font-weight:800;line-height:1.15;margin-top:2px}
+.ov-sub{font-size:.85rem;color:var(--accent);font-weight:600}
+.ov-timer{position:absolute;right:16px;top:16px;padding:8px 18px;font-size:2.6rem;font-weight:800;font-variant-numeric:tabular-nums;color:#fff;border-bottom:3px solid var(--accent)}
+.ov-tools{position:absolute;right:16px;bottom:16px;display:flex;gap:8px}
+.tool{border:none;color:#fff;padding:8px 14px;font-size:.85rem;cursor:pointer}
+.tool.on{background:var(--accent)}
+.ov-hint{position:absolute;left:16px;bottom:16px;padding:7px 12px;font-size:.78rem;color:#cfd6df}
+
+/* ---------- side panel ---------- */
+.panel{background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;padding:18px 18px 28px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{background:var(--accent);color:#111;font-weight:800;padding:6px 10px;border-radius:10px;letter-spacing:1px;transition:background .3s}
+.brand b{display:block;font-size:1.05rem}
+.brand small{color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px}
+.step-label{font-size:.8rem;color:var(--muted);text-align:center}
+.ring-wrap{position:relative;width:210px;height:210px;margin:8px auto 4px}
+.ring{width:100%;height:100%;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:12}
+.ring-bg{stroke:#262d38}
+.ring-fg{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:552.92;transition:stroke .3s}
+.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.time{font-size:3.2rem;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.time.warn{color:var(--accent);animation:pulse .5s ease-in-out infinite alternate}
+@keyframes pulse{to{transform:scale(1.08)}}
+.kind{margin-top:6px;font-size:.85rem;color:var(--accent);font-weight:600}
+.ctrls{display:flex;justify-content:center;gap:10px;margin-top:8px}
+.ic{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:#222834;color:#fff;font-size:1.05rem;cursor:pointer}
+.ic:hover{background:#2b3240}
+.play{min-width:150px;height:46px;border-radius:23px;border:none;background:var(--accent);color:#111;font-weight:800;font-size:1.05rem;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.play.on{background:#eef2f7}
+.next{text-align:center;margin-top:12px;font-size:.88rem;color:var(--muted)}
+.next b{color:var(--text)}
+#exTitle{margin:0;font-size:1.25rem}
+.replace{font-size:.85rem;color:var(--accent);margin-top:2px}
+#cues{margin:12px 0 0;padding:0;list-style:none;counter-reset:c;display:flex;flex-direction:column;gap:8px}
+#cues li{counter-increment:c;display:flex;gap:10px;font-size:.93rem;line-height:1.45;color:#dfe5ec}
+#cues li::before{content:counter(c);flex:0 0 24px;height:24px;border-radius:50%;background:var(--accent);color:#111;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.8rem;margin-top:1px}
+.tip{margin-top:12px;font-size:.85rem;background:rgba(255,255,255,.04);border-left:3px solid var(--accent);padding:8px 10px;border-radius:8px;color:#cdd5df}
+.settings{display:flex;flex-direction:column;gap:10px;font-size:.9rem}
+.settings label{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.settings select{background:#222834;color:#fff;border:1px solid var(--line);border-radius:10px;padding:6px 8px}
+.settings input{accent-color:var(--accent);width:18px;height:18px}
+.prog-head{display:flex;justify-content:space-between;font-size:.9rem;color:var(--muted)}
+.bar{height:6px;background:#262d38;border-radius:6px;margin:8px 0 10px;overflow:hidden}
+#barFill{height:100%;width:0;background:var(--accent);transition:width .3s}
+#planList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;cursor:pointer;border:1px solid transparent}
+.item:hover{background:#222834}
+.item .num{flex:0 0 26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;background:#262d38;color:var(--muted)}
+.item .nm{flex:1;font-size:.9rem;line-height:1.25}
+.item .nm small{display:block;color:var(--muted);font-size:.74rem}
+.item .dur{font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.item.done{opacity:.45}
+.item.active{border-color:var(--accent);background:rgba(255,255,255,.04)}
+.item.active .num{background:var(--accent);color:#111}
+.k-warm .num{box-shadow:inset 0 0 0 2px #ffc531}
+.k-work .num{box-shadow:inset 0 0 0 2px #ff6b2c}
+.k-run .num{box-shadow:inset 0 0 0 2px #3aa0ff}
+.k-rest .num{box-shadow:inset 0 0 0 2px #2ecc71}
+.k-cool .num{box-shadow:inset 0 0 0 2px #a78bfa}
+.foot{font-size:.78rem;color:var(--muted);line-height:1.5;margin:0}
+
+/* ---------- finish modal ---------- */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal.hidden{display:none}
+.modal .box{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:28px 30px;text-align:center;max-width:340px}
+.modal h2{margin:0 0 6px;font-size:1.8rem}
+.modal p{color:var(--muted);margin:0 0 18px}
+
+@media (max-width:900px){
+  .app{grid-template-columns:1fr;grid-template-rows:50vh 1fr}
+  .panel{border-left:none;border-top:1px solid var(--line)}
+  .ov-name{font-size:1.15rem}
+  .ov-timer{font-size:1.8rem;padding:6px 12px}
+  .ov-hint{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="stage">
+    <div class="ov-top glass">
+      <div class="chip"><span class="dot"></span><span id="ovKind">วอร์มอัพ</span></div>
+      <div class="ov-name" id="ovName">-</div>
+      <div class="ov-sub" id="ovSub">-</div>
+    </div>
+    <div class="ov-timer glass" id="ovTimer">00:00</div>
+    <div class="ov-tools">
+      <button id="btnSlow" class="tool glass">สโลว์ 0.5×</button>
+      <button id="btnCam" class="tool glass">รีเซ็ตกล้อง</button>
+    </div>
+    <div class="ov-hint glass">ลากเพื่อหมุนดูรอบตัว · ล้อเมาส์/สองนิ้วเพื่อซูม · Space = เริ่ม/หยุด</div>
+  </div>
+
+  <aside class="panel">
+    <header class="brand">
+      <div class="logo">HYROX</div>
+      <div><b>ฉบับงบ 0 บาท</b><small>ซ้อมในสวนจตุจักร ไม่ต้องมีดัมเบล</small></div>
+    </header>
+
+    <section class="card">
+      <div class="step-label" id="stepLabel">ขั้นที่ 1</div>
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 200 200">
+          <circle class="ring-bg" cx="100" cy="100" r="88"/>
+          <circle class="ring-fg" id="ringFg" cx="100" cy="100" r="88"/>
+        </svg>
+        <div class="ring-center">
+          <div class="time" id="time">00:00</div>
+          <div class="kind" id="kindTxt">-</div>
+        </div>
+      </div>
+      <div class="ctrls">
+        <button class="ic" id="btnPrev" title="ท่าก่อนหน้า">⏮</button>
+        <button class="play" id="btnPlay">▶ เริ่ม</button>
+        <button class="ic" id="btnNext" title="ข้ามท่า">⏭</button>
+        <button class="ic" id="btnReset" title="เริ่มใหม่ทั้งหมด">↺</button>
+      </div>
+      <div class="next">ถัดไป: <b id="nextTxt">-</b></div>
+    </section>
+
+    <section class="card">
+      <h3 id="exTitle">-</h3>
+      <div class="replace" id="exReplace"></div>
+      <ol id="cues"></ol>
+      <div class="tip" id="exTip"></div>
+    </section>
+
+    <section class="card settings">
+      <label>ระดับความหนัก
+        <select id="selLevel">
+          <option value="0.75">มือใหม่ (เวลา ×0.75)</option>
+          <option value="1" selected>ปกติ</option>
+          <option value="1.5">โหด (เวลา ×1.5)</option>
+        </select>
+      </label>
+      <label>ระหว่างสเตชัน
+        <select id="selRun">
+          <option value="0">พักเดินเบาๆ 20 วิ</option>
+          <option value="60">วิ่ง 1 นาที</option>
+          <option value="120" selected>วิ่ง 2 นาที</option>
+          <option value="240">วิ่ง 4 นาที</option>
+          <option value="360">วิ่ง ~1 กม. (6 นาที) แบบ HYROX</option>
+        </select>
+      </label>
+      <label>เสียงบี๊บ + เสียงพูดบอกท่า <input type="checkbox" id="chkSound" checked></label>
+    </section>
+
+    <section class="card">
+      <div class="prog-head"><span>โปรแกรมทั้งหมด</span><span id="totalLeft">-</span></div>
+      <div class="bar"><div id="barFill"></div></div>
+      <ul id="planList"></ul>
+    </section>
+
+    <p class="foot">⚠️ ถ้าเจ็บหน้าอก เวียนหัว หรือหน้ามืด ให้หยุดทันที · ซ้อมช่วงเช้าหรือเย็นเลี่ยงแดดจัด · พกน้ำไปด้วย · ท่าดันต้นไม้ให้เลือกต้นใหญ่ที่มั่นคงเท่านั้น และเคารพกฎของสวน</p>
+  </aside>
+</div>
+
+<div class="modal hidden" id="done">
+  <div class="box">
+    <h2>🎉 จบโปรแกรม!</h2>
+    <p id="doneTxt">เก่งมาก วันนี้ร่างพังอย่างมีคุณภาพ</p>
+    <button class="play" id="btnAgain">เริ่มใหม่อีกรอบ</button>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const $ = id => document.getElementById(id);
+
+/* =========================================================
+   1) SCENE — สวนสาธารณะ
+   ========================================================= */
+const stage = $('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+stage.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const SKY = 0xcfe9f7;
+scene.background = new THREE.Color(SKY);
+scene.fog = new THREE.Fog(SKY, 16, 45);
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
+const CAM_HOME = new THREE.Vector3(3.8, 2.1, 4.8);
+const TARGET_HOME = new THREE.Vector3(0, 0.85, 0.25);
+camera.position.copy(CAM_HOME);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(TARGET_HOME);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 2.5;
+controls.maxDistance = 14;
+controls.maxPolarAngle = Math.PI * 0.49;
+
+scene.add(new THREE.HemisphereLight(0xeaf6ff, 0x55703a, 1.15));
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
+sun.position.set(4, 9, 5);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 25 });
+sun.shadow.camera.updateProjectionMatrix();
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.02;
+scene.add(sun);
+
+const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...extra });
+
+// พื้นหญ้า ลู่วิ่ง บ่อน้ำ เสื่อ
+const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 64), std(0x86c05a));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+const track = new THREE.Mesh(new THREE.RingGeometry(5.2, 6.4, 120), std(0xd9b48a));
+track.rotation.x = -Math.PI / 2; track.position.y = 0.004; track.receiveShadow = true; scene.add(track);
+const lane = new THREE.Mesh(new THREE.RingGeometry(5.78, 5.82, 120), std(0xffffff));
+lane.rotation.x = -Math.PI / 2; lane.position.y = 0.006; scene.add(lane);
+
+const pond = new THREE.Mesh(new THREE.CircleGeometry(4, 48), std(0x5fb3d9, { roughness: 0.15 }));
+pond.rotation.x = -Math.PI / 2; pond.scale.set(1.8, 1, 1); pond.position.set(-12, 0.01, -9); scene.add(pond);
+
+const matMesh = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.012, 2.6), std(0x2b3a55, { roughness: 0.6 }));
+matMesh.position.set(0, -0.004, 0.45); matMesh.receiveShadow = true; scene.add(matMesh);
+
+// ต้นไม้ low-poly
+let seed = 11;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const LEAF = [0x4f9a3c, 0x5fae45, 0x3f8a34, 0x6bbf4e];
+function makeTree(x, z, s = 1, trunkR = 0.12) {
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(trunkR * 0.8, trunkR, 1.6, 12), std(0x7a5232));
+  trunk.position.y = 0.8; trunk.castShadow = true; trunk.receiveShadow = true; g.add(trunk);
+  const leafMat = std(LEAF[Math.floor(rnd() * LEAF.length)], { flatShading: true });
+  [[0, 2.0, 0, 0.85], [0.45, 1.75, 0.2, 0.6], [-0.42, 1.8, -0.15, 0.62], [0.05, 2.5, -0.05, 0.6]].forEach(([a, b, c, r]) => {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), leafMat);
+    m.position.set(a, b, c); m.castShadow = true; g.add(m);
+  });
+  g.position.set(x, 0, z); g.scale.setScalar(s); scene.add(g);
+  return g;
+}
+for (let i = 0; i < 28; i++) {
+  const a = rnd() * Math.PI * 2, r = 7.5 + rnd() * 15;
+  makeTree(Math.cos(a) * r, Math.sin(a) * r, 0.9 + rnd() * 0.9);
+}
+const pushTree = makeTree(0, 1, 1.15, 0.2);
+pushTree.visible = false;
+
+/* =========================================================
+   2) CHARACTER — ตัวละครมีข้อต่อจริง
+   ========================================================= */
+const M = {
+  skin:   std(0xd9a066, { roughness: 0.6 }),
+  shirt:  std(0xff6b2c, { roughness: 0.7 }),
+  shorts: std(0x1f2633),
+  shoe:   std(0xf4f4f4, { roughness: 0.5 }),
+  sole:   std(0xff6b2c),
+  hair:   std(0x161616, { roughness: 0.9 }),
+  white:  std(0xffffff),
+  eye:    std(0x111111),
+  bottle: std(0x9fdcff, { roughness: 0.15, transparent: true, opacity: 0.75 }),
+  lid:    std(0x2b7bff),
+  pack:   std(0x2d4f8a),
+  pack2:  std(0x1f3866),
+  ball:   std(0xffd23f, { roughness: 0.5 }),
+  seam:   std(0x2b7bff)
+};
+const markers = [];
+function cap(r, len, mat) {
+  const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.01, len - 2 * r), 6, 16), mat);
+  m.castShadow = true;
+  return m;
+}
+function marker(parent, x, y, z) {
+  const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); markers.push(o); return o;
+}
+
+const root = new THREE.Group(); scene.add(root);
+const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.15, 24, 16), M.shorts);
+pelvis.scale.set(1.2, 0.8, 0.85); pelvis.castShadow = true; root.add(pelvis);
+
+function makeLeg(side) {
+  const hip = new THREE.Group(); hip.position.set(side * 0.095, -0.03, 0); root.add(hip);
+  const short = cap(0.087, 0.3, M.shorts); short.position.y = -0.12; hip.add(short);
+  const thigh = cap(0.07, 0.46, M.skin); thigh.position.y = -0.215; hip.add(thigh);
+  const knee = new THREE.Group(); knee.position.y = -0.43; hip.add(knee);
+  const shin = cap(0.056, 0.44, M.skin); shin.position.y = -0.2; knee.add(shin);
+  const ankle = new THREE.Group(); ankle.position.y = -0.42; knee.add(ankle);
+  const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.054, 0.052, 0.07, 14), M.white); ankle.add(sock);
+  const shoe = cap(0.058, 0.27, M.shoe);
+  shoe.rotation.x = Math.PI / 2; shoe.scale.set(1, 1, 0.75); shoe.position.set(0, -0.05, 0.055); ankle.add(shoe);
+  const sole = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.025, 0.28), M.sole);
+  sole.position.set(0, -0.095, 0.055); sole.castShadow = true; ankle.add(sole);
+  marker(ankle, 0, -0.108, 0.19);   // ปลายเท้า
+  marker(ankle, 0, -0.108, -0.08);  // ส้นเท้า
+  return { hip, knee, ankle };
+}
+const LL = makeLeg(1), RL = makeLeg(-1);
+
+const spine = new THREE.Group(); spine.position.y = 0.04; root.add(spine);
+const torso = cap(0.16, 0.5, M.shirt); torso.scale.set(1.3, 1, 0.8); torso.position.y = 0.24; spine.add(torso);
+const chest = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 16), M.shirt);
+chest.scale.set(1.5, 0.75, 0.9); chest.position.y = 0.42; chest.castShadow = true; spine.add(chest);
+const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.035, 0.01), M.white);
+stripe.position.set(0, 0.33, 0.128); spine.add(stripe);
+
+const neck = new THREE.Group(); neck.position.y = 0.53; spine.add(neck);
+const neckM = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.12, 14), M.skin);
+neckM.position.y = 0.04; neck.add(neckM);
+const head = new THREE.Group(); head.position.y = 0.17; neck.add(head);
+const skull = new THREE.Mesh(new THREE.SphereGeometry(0.115, 32, 24), M.skin);
+skull.scale.set(0.95, 1.08, 1); skull.castShadow = true; head.add(skull);
+const hair = new THREE.Mesh(new THREE.SphereGeometry(0.121, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), M.hair);
+hair.position.y = 0.012; hair.rotation.x = -0.35; hair.scale.set(0.98, 1.1, 1.04); head.add(hair);
+const band = new THREE.Mesh(new THREE.TorusGeometry(0.114, 0.016, 10, 40), M.shirt);
+band.rotation.x = Math.PI / 2; band.position.y = 0.045; head.add(band);
+[-1, 1].forEach(s => {
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), M.eye);
+  eye.position.set(s * 0.038, 0.012, 0.104); head.add(eye);
+  const ear = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), M.skin);
+  ear.position.set(s * 0.108, 0, 0); ear.scale.set(0.6, 1, 0.8); head.add(ear);
+});
+const nose = new THREE.Mesh(new THREE.SphereGeometry(0.017, 10, 8), M.skin);
+nose.position.set(0, -0.012, 0.112); head.add(nose);
+
+function makeArm(side) {
+  const sh = new THREE.Group(); sh.position.set(side * 0.235, 0.45, 0); spine.add(sh);
+  const delt = new THREE.Mesh(new THREE.SphereGeometry(0.068, 18, 14), M.skin); delt.castShadow = true; sh.add(delt);
+  const upper = cap(0.055, 0.31, M.skin); upper.position.y = -0.14; sh.add(upper);
+  const elbow = new THREE.Group(); elbow.position.y = -0.29; sh.add(elbow);
+  const fore = cap(0.047, 0.28, M.skin); fore.position.y = -0.125; elbow.add(fore);
+  const hand = new THREE.Group(); hand.position.y = -0.27; elbow.add(hand);
+  const palm = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12), M.skin);
+  palm.scale.set(0.85, 1.15, 0.7); palm.position.y = -0.03; palm.castShadow = true; hand.add(palm);
+  const tip = marker(hand, 0, -0.085, 0);
+  const bottle = new THREE.Group(); bottle.position.y = -0.05; hand.add(bottle);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.24, 18), M.bottle);
+  body.position.y = -0.15; body.castShadow = true; bottle.add(body);
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.05, 12), M.lid); bottle.add(lid);
+  bottle.visible = false;
+  return { sh, elbow, hand, tip, bottle };
+}
+const LA = makeArm(1), RA = makeArm(-1);
+
+// เป้สะพายหลัง
+const pack = new THREE.Group(); pack.position.set(0, 0.3, -0.19); spine.add(pack);
+const packBody = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.4, 0.16), M.pack); packBody.castShadow = true; pack.add(packBody);
+const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.15, 0.05), M.pack2); pocket.position.set(0, -0.09, -0.09); pack.add(pocket);
+[-1, 1].forEach(s => {
+  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.36, 0.02), M.pack2);
+  strap.position.set(s * 0.1, 0.03, 0.33); pack.add(strap);
+});
+pack.visible = false;
+
+// ลูกบอล
+const ball = new THREE.Mesh(new THREE.SphereGeometry(0.13, 28, 20), M.ball);
+ball.castShadow = true; scene.add(ball);
+const seam = new THREE.Mesh(new THREE.TorusGeometry(0.131, 0.008, 8, 40), M.seam); ball.add(seam);
+ball.visible = false;
+
+/* =========================================================
+   3) POSE SYSTEM — keyframe + auto ground contact
+   ========================================================= */
+const DEF = { y:0, z:0, pitch:0, spine:0, neck:0, abd:0.12, lSh:0, rSh:0, lEl:-0.15, rEl:-0.15,
+  lHip:0, rHip:0, lKnee:0, rKnee:0, lFlat:1, rFlat:1, lAnk:0, rAnk:0, ball:0 };
+const KEYS = Object.keys(DEF);
+const P = o => ({ ...DEF, ...o });
+const SIDED = ['Sh', 'El', 'Hip', 'Knee', 'Flat', 'Ank'];
+function both(o) {
+  const r = { ...o };
+  for (const k of SIDED) if (k in o) { r['l' + k] = o[k]; r['r' + k] = o[k]; delete r[k]; }
+  return P(r);
+}
+function mirror(p) {
+  const q = { ...p };
+  for (const k of SIDED) { q['l' + k] = p['r' + k]; q['r' + k] = p['l' + k]; }
+  return q;
+}
+function lerpPose(a, b, u) {
+  const o = {};
+  for (const k of KEYS) o[k] = a[k] + (b[k] - a[k]) * u;
+  return o;
+}
+function sampleKeys(keys, p) {
+  const n = keys.length;
+  let i = 0;
+  for (let k = 0; k < n; k++) if (keys[k][0] <= p) i = k;
+  const ni = (i + 1) % n;
+  const t0 = keys[i][0], t1 = ni === 0 ? 1 : keys[ni][0];
+  let u = (p - t0) / (t1 - t0);
+  u = u * u * (3 - 2 * u);
+  return lerpPose(keys[i][1], keys[ni][1], u);
+}
+
+const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+function applyPose(q) {
+  root.position.set(0, 0, q.z);
+  root.rotation.x = q.pitch;
+  spine.rotation.x = q.spine;
+  neck.rotation.x = q.neck;
+  LA.sh.rotation.set(q.lSh, 0, q.abd);
+  RA.sh.rotation.set(q.rSh, 0, -q.abd);
+  LA.elbow.rotation.x = q.lEl;
+  RA.elbow.rotation.x = q.rEl;
+  LL.hip.rotation.x = q.lHip;  RL.hip.rotation.x = q.rHip;
+  LL.knee.rotation.x = q.lKnee; RL.knee.rotation.x = q.rKnee;
+  LL.ankle.rotation.x = q.lFlat * -(q.pitch + q.lHip + q.lKnee) + (1 - q.lFlat) * q.lAnk;
+  RL.ankle.rotation.x = q.rFlat * -(q.pitch + q.rHip + q.rKnee) + (1 - q.rFlat) * q.rAnk;
+  root.updateMatrixWorld(true);
+  let minY = Infinity;
+  for (const m of markers) { m.getWorldPosition(tmp); if (tmp.y < minY) minY = tmp.y; }
+  root.position.y = -minY + q.y;
+  root.updateMatrixWorld(true);
+}
+
+/* ---------- ท่าทั้งหมด ---------- */
+const jA = P({ spine:0.14, neck:-0.12, abd:0.1, lHip:-0.95, lKnee:1.35, rHip:0.35, rKnee:0.55,
+  lSh:0.55, rSh:-0.7, lEl:-1.5, rEl:-1.5, y:0.02, lFlat:0.7, rFlat:0.2, rAnk:0.3 });
+const jB = mirror(jA);
+const jM = { ...lerpPose(jA, jB, 0.5), y: 0.09 };
+
+const skUp   = both({ Sh:-2.85, El:-0.12, Hip:-0.05, Knee:0.1, abd:0.18 });
+const skDown = both({ pitch:0.65, neck:-0.5, Hip:-0.95, Knee:0.6, Sh:0.25, El:-0.1, abd:0.15 });
+
+const pA = P({ pitch:0.8, spine:0.05, neck:-0.55, abd:0.12, lSh:-2.35, rSh:-2.35, lEl:-0.45, rEl:-0.45,
+  lHip:-1.45, lKnee:1.6, rHip:-0.2, rKnee:0.2, lFlat:0.4, rFlat:0, rAnk:-0.4, lAnk:-0.3 });
+
+const rDown = both({ pitch:0.85, neck:-0.6, Hip:-1.15, Knee:0.45, Sh:-0.85, El:-0.05, abd:0.12 });
+const rUp   = { ...rDown, lSh:0.15, rSh:0.15, lEl:-1.0, rEl:-1.0, abd:0.22 };
+
+const bStand = P({});
+const bSquat = both({ pitch:1.1, neck:-0.6, Hip:-2.4, Knee:2.3, Sh:-1.3, El:-0.05, abd:0.15 });
+const bPlank = both({ pitch:1.42, neck:-0.9, Hip:0, Knee:0, Sh:-1.42, El:-0.02, abd:0.15, Flat:0, Ank:0.15 });
+const bLow   = { ...bPlank, pitch:1.52, lSh:-0.6, rSh:-0.6, lEl:-0.95, rEl:-0.95 };
+const bLoad  = both({ pitch:0.55, neck:-0.4, Hip:-1.25, Knee:1.35, Sh:0.7, El:-0.2 });
+const bAir   = both({ pitch:0.15, Hip:-0.45, Knee:0.6, Sh:-2.6, El:-0.2, Flat:0.4, Ank:0.4, y:0.38, z:0.45 });
+const bLand  = both({ pitch:0.5, neck:-0.3, Hip:-1.2, Knee:1.3, Sh:-1.0, El:-0.3, z:0.9 });
+const bEnd   = P({ z:0.9 });
+
+const sjSquat = both({ pitch:0.4, neck:-0.35, Hip:-1.75, Knee:1.95, Sh:0.55, El:-0.2 });
+const sjAir   = both({ Hip:0.05, Knee:0.12, Sh:-2.9, El:-0.15, Flat:0, Ank:0.55, y:0.38 });
+const sjLand  = both({ pitch:0.25, neck:-0.2, Hip:-0.95, Knee:1.05, Sh:-1.2, El:-0.4 });
+
+const fA = P({ abd:0.2, lHip:-0.38, lKnee:0.08, rHip:0.3, rKnee:0.15, lEl:-0.05, rEl:-0.05 });
+const fP = P({ abd:0.2, lHip:-0.05, lKnee:0.1, rHip:-0.35, rKnee:0.95, lEl:-0.05, rEl:-0.05, rFlat:0.6 });
+
+const lS = both({ Sh:-0.3, El:-1.6, abd:0.25 });
+const lL = P({ spine:0.05, abd:0.25, lSh:-0.3, rSh:-0.3, lEl:-1.6, rEl:-1.6,
+  lHip:-1.4, lKnee:1.5, rHip:0.45, rKnee:1.0, rFlat:0, rAnk:-0.2 });
+
+const wHold  = both({ Sh:-0.55, El:-1.9, abd:-0.05 });
+const wSquat = both({ pitch:0.35, neck:-0.3, Hip:-1.75, Knee:1.95, Sh:-0.75, El:-1.75, abd:-0.05 });
+const wDrive = both({ Sh:-1.7, El:-1.2, abd:-0.05, Flat:0.6, Ank:0.3, y:0.02 });
+const wRel   = both({ Sh:-2.9, El:-0.1, abd:0.02, Flat:0.5, Ank:0.4, y:0.04, ball:1.5 });
+const wCatch = both({ Sh:-2.5, El:-0.6, abd:-0.03, ball:0.05 });
+
+const stUp   = both({ Sh:-3.0, El:-0.05, abd:0.1 });
+const stFold = both({ pitch:1.25, neck:-0.1, Hip:-1.25, Knee:0.05, Sh:-1.25, El:-0.05, abd:0.08 });
+
+const rs1 = both({ pitch:0.55, neck:-0.45, Hip:-0.85, Knee:0.6, Sh:-0.4, El:-0.1, abd:0.08 });
+const rs2 = { ...rs1, pitch:0.62, spine:0.06, neck:-0.5 };
+
+const EX = {
+  jog: {
+    name:'วิ่งเหยาะวอร์มอัพ', en:'Warm-up Jog', replaces:null, dur:0.72, props:{},
+    keys:[[0,jA],[0.25,jM],[0.5,jB],[0.75,jM]],
+    cues:['วิ่งเหยาะช้าๆ รอบสวน หรือวิ่งอยู่กับที่ก็ได้','แกว่งแขนสบายๆ งอศอกประมาณ 90°','เพซที่ยังพูดเป็นประโยคได้ (โซน 2)'],
+    tip:'ช่วงนี้ห้ามรีบ ให้ร่างกายค่อยๆ ร้อนขึ้น'
+  },
+  run: {
+    name:'วิ่งคั่นสเตชัน', en:'Run (แบบ HYROX)', replaces:null,
+    cues:['วิ่งเพซที่คุมได้ ไม่ต้องสปรินต์','ใช้ช่วงนี้ปรับลมหายใจให้นิ่ง','ไปถึงจุดถัดไปแล้วเริ่มท่าต่อทันที'],
+    tip:'HYROX ของจริงวิ่ง 1 กม. ระหว่างทุกสเตชัน ค่อยๆ เพิ่มเวลาวิ่งเมื่อฟิตขึ้น'
+  },
+  rest: {
+    name:'พักหายใจ', en:'Active Rest', replaces:null, dur:2.6, props:{},
+    keys:[[0,rs1],[0.5,rs2]],
+    cues:['เดินช้าๆ หรือเอามือเท้าเข่าพัก','หายใจเข้าทางจมูก ออกทางปากยาวๆ','จิบน้ำนิดหน่อย'], tip:''
+  },
+  ski: {
+    name:'ดึงแขนสกี', en:'Standing Ski Pull', replaces:'SkiErg', dur:1.7, props:{},
+    keys:[[0,skUp],[0.4,skDown],[0.55,skDown]],
+    cues:['ยืนกางเท้าเท่าสะโพก ชูแขนเหนือหัว','ดึงแขนลงแรงๆ พร้อมพับสะโพก งอเข่านิดหน่อย','เหวี่ยงมือเลยสะโพกไปข้างหลัง แล้วค่อยยืดตัวกลับ'],
+    tip:'อยากให้หนักขึ้น ถือขวดน้ำ 2 ข้างแล้วทำท่าเดิม'
+  },
+  push: {
+    name:'ดันต้นไม้ตอกเข่า', en:'Tree Push Drive', replaces:'Sled Push', dur:0.75, props:{ tree:true },
+    keys:[[0,pA],[0.5,mirror(pA)]],
+    cues:['ยืนห่างต้นไม้ใหญ่ กำแพง หรือเสา ประมาณ 1 ช่วงแขน แล้วเอนตัว 45°','ดันมือให้แน่น เกร็งท้อง ลำตัวตรงเป็นเส้นเดียว','ตอกเข่าสลับขึ้นแรงๆ ถีบพื้นด้วยปลายเท้าเหมือนกำลังเข็นรถ'],
+    tip:'เลือกต้นไม้ใหญ่ที่มั่นคงเท่านั้น ห้ามดันต้นไม้เล็ก'
+  },
+  row: {
+    name:'โน้มตัวดึงขวดน้ำ', en:'Bent-over Bottle Row', replaces:'Sled Pull', dur:1.9, props:{ bottles:true },
+    keys:[[0,rDown],[0.4,rUp],[0.55,rUp]],
+    cues:['ถือขวดน้ำหรือแกลลอน 2 ข้าง ย่อเข่าเล็กน้อย พับสะโพก หลังตรง','ดึงศอกไปข้างหลังชิดลำตัว บีบสะบักเข้าหากัน','ค่อยๆ ปล่อยลงช้าๆ นับ 2 วินาที'],
+    tip:'หลังต้องตรงตลอด ห้ามงอหลังค่อม'
+  },
+  burpee: {
+    name:'เบอร์ปีกระโดดไกล', en:'Burpee Broad Jump', replaces:null, dur:3.4, props:{},
+    keys:[[0,bStand],[0.09,bSquat],[0.2,bPlank],[0.3,bLow],[0.4,bPlank],[0.5,bSquat],[0.6,bLoad],[0.69,bAir],[0.77,bLand],[0.86,bEnd]],
+    cues:['ย่อตัวลง วางมือบนพื้น','ดีดเท้าไปข้างหลังเป็นท่าแพลงก์ แล้วลดอกลงใกล้พื้น','ดันตัวขึ้น แล้วกระโดดเท้าเข้ามาหามือ','เหวี่ยงแขนกระโดดไปข้างหน้าให้ไกล ลงพื้นโดยงอเข่านุ่มๆ'],
+    tip:'ท่านี้ใช้ท่าเดียวกับของจริงเลย ทำบนสนามหญ้าจะถนอมข้อมือกว่า'
+  },
+  squatjump: {
+    name:'สควอทกระโดด', en:'Squat Jump', replaces:'Rowing', dur:1.9, props:{},
+    keys:[[0,bStand],[0.3,sjSquat],[0.48,sjAir],[0.64,sjLand],[0.8,bStand]],
+    cues:['ยืนกางเท้ากว้างกว่าสะโพกเล็กน้อย','ย่อลงจนต้นขาขนานพื้น เหวี่ยงแขนไปข้างหลัง','ส่งแรงกระโดดขึ้นพร้อมชูแขน ลงพื้นโดยงอเข่าซับแรง'],
+    tip:'ถ้าเข่าไม่ค่อยดี ไม่ต้องกระโดด ใช้สควอทเร็วๆ แทน'
+  },
+  farmer: {
+    name:'หิ้วแกลลอนเดิน', en:"Farmer's Carry", replaces:'Farmers Carry', dur:1.1, props:{ bottles:true },
+    keys:[[0,fA],[0.25,fP],[0.5,mirror(fA)],[0.75,mirror(fP)]],
+    cues:['หิ้วแกลลอนหรือขวดน้ำ 2 ข้าง เติมน้ำให้หนักพอ','ยืดอก กดไหล่ลง เกร็งท้อง','ก้าวสั้นๆ เร็วๆ อย่าให้ตัวเอียง'],
+    tip:'ขวดน้ำ 1.5 ลิตรหนักขวดละ 1.5 กก. ถ้าแกลลอน 6 ลิตรก็หนักขึ้นเป็น 6 กก.'
+  },
+  lunge: {
+    name:'แบกเป้ลันจ์เดิน', en:'Backpack Walking Lunge', replaces:'Sandbag Lunges', dur:3.2, props:{ pack:true },
+    keys:[[0,lS],[0.25,lL],[0.5,lS],[0.75,mirror(lL)]],
+    cues:['สะพายเป้ใส่ของหนัก (หนังสือหรือขวดน้ำ) จับสายไว้แน่น','ก้าวยาวไปข้างหน้า ย่อลงจนเข่าหลังเกือบแตะพื้น','ถีบส้นเท้าหน้าลุกขึ้น แล้วสลับขา'],
+    tip:'เข่าหน้าอยู่แนวเดียวกับปลายเท้า อย่าให้บิดเข้าใน'
+  },
+  wallball: {
+    name:'สควอทโยนบอล', en:'Wall Ball', replaces:'Wall Balls', dur:2.3, props:{ ball:true },
+    keys:[[0,wHold],[0.28,wSquat],[0.46,wDrive],[0.6,wRel],[0.8,wCatch]],
+    cues:['ถือลูกบอล (หรือขวดน้ำหรือถุงทราย) ไว้ระดับอก','สควอทลงจนต้นขาขนานพื้น','ส่งแรงยืดตัวขึ้นแล้วโยนให้สูงสุดแขน รับแล้วสควอทต่อเลย'],
+    tip:'ไม่มีบอล ใช้ท่าสควอทแล้วดันมือขึ้นฟ้าเปล่าๆ ได้ · อย่าโยนใกล้คนอื่น'
+  },
+  stretch: {
+    name:'คูลดาวน์ยืดเหยียด', en:'Cool-down Stretch', replaces:null, dur:6, props:{},
+    keys:[[0,stUp],[0.4,stFold],[0.75,stFold]],
+    cues:['ชูแขนขึ้นสูง หายใจเข้าลึกๆ','พับตัวลงช้าๆ พร้อมหายใจออก','ค้างไว้ 15–20 วินาที แล้วทำซ้ำ'],
+    tip:'ยืดต่อที่ต้นขาหน้า น่อง และไหล่ อย่างละ 20 วินาที'
+  }
+};
+
+/* =========================================================
+   4) PROGRAM + TIMER
+   ========================================================= */
+const STATIONS = [
+  { ex:'ski', dur:45 }, { ex:'push', dur:40 }, { ex:'row', dur:45 }, { ex:'burpee', dur:45 },
+  { ex:'squatjump', dur:45 }, { ex:'farmer', dur:60 }, { ex:'lunge', dur:60 }, { ex:'wallball', dur:45 }
+];
+const COLORS = { warm:'#ffc531', work:'#ff6b2c', run:'#3aa0ff', rest:'#2ecc71', cool:'#a78bfa' };
+const KIND_TXT = { warm:'วอร์มอัพ', work:'ลุย!', run:'วิ่ง', rest:'พัก', cool:'คูลดาวน์' };
+const C = 2 * Math.PI * 88;
+
+let plan = [], cur = 0, remaining = 0, running = false, finished = false, soundOn = true;
+
+function infoOf(s) { return s.kind === 'run' ? EX.run : EX[s.ex]; }
+const fmt = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const fmtClock = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+function buildPlan() {
+  const lv = +$('selLevel').value, run = +$('selRun').value;
+  plan = [{ ex:'jog', kind:'warm', dur:180, label:'วอร์มอัพ' }];
+  STATIONS.forEach((s, i) => {
+    plan.push({ ex:s.ex, kind:'work', dur:Math.max(15, Math.round(s.dur * lv / 5) * 5), label:`สเตชัน ${i + 1}/8` });
+    if (i < STATIONS.length - 1) {
+      plan.push(run > 0 ? { ex:'jog', kind:'run', dur:run, label:'วิ่งคั่น' }
+                        : { ex:'rest', kind:'rest', dur:20, label:'พัก' });
+    }
+  });
+  plan.push({ ex:'stretch', kind:'cool', dur:120, label:'คูลดาวน์' });
+}
+
+/* ---------- sound ---------- */
+let actx = null;
+function ensureAudio() {
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume();
+}
+function beep(freq = 880, d = 0.12, v = 0.25) {
+  if (!soundOn || !actx) return;
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = 'sine'; o.frequency.value = freq;
+  g.gain.setValueAtTime(v, actx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + d);
+  o.connect(g).connect(actx.destination);
+  o.start(); o.stop(actx.currentTime + d + 0.02);
+}
+function speak(text) {
+  if (!soundOn || !('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'th-TH'; u.rate = 1.05;
+  speechSynthesis.speak(u);
+}
+
+/* ---------- animation switching ---------- */
+let curEx = 'jog', animTime = 0, blend = 1, prevPose = P({}), lastPose = P({}), speed = 1;
+function setExercise(key) {
+  if (key === curEx) return;
+  prevPose = { ...lastPose }; blend = 0; animTime = 0; curEx = key;
+  const pr = EX[key].props || {};
+  LA.bottle.visible = RA.bottle.visible = !!pr.bottles;
+  pack.visible = !!pr.pack;
+  ball.visible = !!pr.ball;
+  pushTree.visible = !!pr.tree;
+}
+
+/* ---------- UI ---------- */
+let lastShown = -1;
+function renderList() {
+  $('planList').innerHTML = plan.map((s, i) => {
+    const info = infoOf(s);
+    const cls = `item k-${s.kind}${i === cur ? ' active' : ''}${i < cur ? ' done' : ''}`;
+    return `<li class="${cls}" data-i="${i}">
+      <span class="num">${i < cur ? '✓' : i + 1}</span>
+      <span class="nm">${info.name}<small>${s.label}${info.replaces ? ' · แทน ' + info.replaces : ''}</small></span>
+      <span class="dur">${fmt(s.dur)}</span></li>`;
+  }).join('');
+  const act = $('planList').querySelector('.active');
+  if (act) act.scrollIntoView({ block:'nearest' });
+}
+function renderStep() {
+  const s = plan[cur], info = infoOf(s);
+  document.documentElement.style.setProperty('--accent', COLORS[s.kind]);
+  $('stepLabel').textContent = `ขั้นที่ ${cur + 1}/${plan.length} · ${s.label}`;
+  $('kindTxt').textContent = KIND_TXT[s.kind];
+  $('exTitle').textContent = info.name;
+  $('exReplace').textContent = info.replaces ? `${info.en} · ใช้แทนสเตชัน ${info.replaces}` : info.en;
+  $('cues').innerHTML = info.cues.map(c => `<li>${c}</li>`).join('');
+  $('exTip').style.display = info.tip ? '' : 'none';
+  $('exTip').textContent = info.tip ? '💡 ' + info.tip : '';
+  $('ovKind').textContent = `${s.label} · ขั้นที่ ${cur + 1}/${plan.length}`;
+  $('ovName').textContent = info.name;
+  $('ovSub').textContent = info.en + (info.replaces ? ` · แทน ${info.replaces}` : '');
+  const nx = plan[cur + 1];
+  $('nextTxt').textContent = nx ? `${infoOf(nx).name} (${fmt(nx.dur)})` : 'จบโปรแกรม 🎉';
+  setExercise(s.ex);
+  renderList();
+  updateTimerUI(true);
+}
+function updateTimerUI(force) {
+  const s = plan[cur];
+  const frac = Math.max(0, remaining) / s.dur;
+  $('ringFg').style.strokeDashoffset = C * (1 - frac);
+  const sec = Math.max(0, Math.ceil(remaining));
+  if (sec !== lastShown || force) {
+    lastShown = sec;
+    const t = fmtClock(sec);
+    $('time').textContent = t; $('ovTimer').textContent = t;
+    $('time').classList.toggle('warn', running && sec <= 3);
+    let left = Math.max(0, remaining);
+    for (let i = cur + 1; i < plan.length; i++) left += plan[i].dur;
+    const total = plan.reduce((a, b) => a + b.dur, 0);
+    $('totalLeft').textContent = `เหลือ ~${Math.ceil(left / 60)} นาที`;
+    $('barFill').style.width = (100 * (1 - left / total)) + '%';
+  }
+}
+function setRunning(v) {
+  running = v;
+  $('btnPlay').textContent = v ? '⏸ หยุดชั่วคราว' : '▶ เริ่ม';
+  $('btnPlay').classList.toggle('on', v);
+}
+function goTo(i, announce) {
+  cur = Math.max(0, Math.min(plan.length - 1, i));
+  remaining = plan[cur].dur;
+  finished = false;
+  renderStep();
+  if (announce) speak(`${KIND_TXT[plan[cur].kind]} ${infoOf(plan[cur]).name} ${Math.round(plan[cur].dur)} วินาที`);
+}
+function tickTimer(dt) {
+  if (!running) return;
+  const before = remaining;
+  remaining -= dt;
+  if (plan[cur].dur > 25 && before > 10 && remaining <= 10) speak('อีกสิบวินาที');
+  for (const s of [3, 2, 1]) if (before > s && remaining <= s) beep(660, 0.12);
+  if (remaining <= 0) {
+    beep(1046, 0.45, 0.3);
+    if (cur < plan.length - 1) {
+      goTo(cur + 1, true);
+    } else {
+      setRunning(false); finished = true; remaining = 0;
+      updateTimerUI(true);
+      const mins = Math.round(plan.reduce((a, b) => a + b.dur, 0) / 60);
+      $('doneTxt').textContent = `ซ้อมครบ ${plan.length} ขั้นตอน รวมประมาณ ${mins} นาที เก่งมาก!`;
+      $('done').classList.remove('hidden');
+      speak('เยี่ยมมาก จบโปรแกรมแล้ว');
+    }
+  }
+  updateTimerUI(false);
+}
+
+/* ---------- events ---------- */
+$('btnPlay').onclick = () => {
+  ensureAudio();
+  if (finished) goTo(0, false);
+  setRunning(!running);
+  if (running) { beep(880, 0.15); speak(`เริ่ม ${infoOf(plan[cur]).name}`); }
+};
+$('btnNext').onclick = () => { if (cur < plan.length - 1) goTo(cur + 1, running); };
+$('btnPrev').onclick = () => goTo(cur - 1, running);
+$('btnReset').onclick = () => { setRunning(false); goTo(0, false); };
+$('btnAgain').onclick = () => { $('done').classList.add('hidden'); goTo(0, false); };
+$('planList').onclick = e => {
+  const li = e.target.closest('.item');
+  if (li) goTo(+li.dataset.i, running);
+};
+$('selLevel').onchange = $('selRun').onchange = () => { setRunning(false); buildPlan(); goTo(0, false); };
+$('chkSound').onchange = e => { soundOn = e.target.checked; if (!soundOn && 'speechSynthesis' in window) speechSynthesis.cancel(); };
+$('btnSlow').onclick = () => {
+  speed = speed === 1 ? 0.5 : 1;
+  $('btnSlow').classList.toggle('on', speed !== 1);
+};
+$('btnCam').onclick = () => { camera.position.copy(CAM_HOME); controls.target.copy(TARGET_HOME); };
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); $('btnPlay').click(); }
+  if (e.code === 'ArrowRight') $('btnNext').click();
+  if (e.code === 'ArrowLeft') $('btnPrev').click();
+});
+
+/* ---------- resize ---------- */
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.fov = w / h < 1 ? 52 : 38;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+
+/* =========================================================
+   5) MAIN LOOP
+   ========================================================= */
+let lastNow = performance.now();
+const handL = new THREE.Vector3(), handR = new THREE.Vector3();
+function frame(now) {
+  const realDt = Math.min((now - lastNow) / 1000, 5);
+  lastNow = now;
+  const dt = Math.min(realDt, 0.1);
+
+  animTime += dt * speed;
+  const ex = EX[curEx];
+  let pose = sampleKeys(ex.keys, (animTime / ex.dur) % 1);
+  if (blend < 1) {
+    blend = Math.min(1, blend + dt * 2.5);
+    const u = blend * blend * (3 - 2 * blend);
+    pose = lerpPose(prevPose, pose, u);
+  }
+  applyPose(pose);
+  lastPose = pose;
+
+  if (ball.visible) {
+    LA.hand.getWorldPosition(handL); RA.hand.getWorldPosition(handR);
+    ball.position.addVectors(handL, handR).multiplyScalar(0.5);
+    ball.position.y += -0.03 + pose.ball;
+    ball.position.z += 0.05;
+    ball.rotation.x += dt * 3;
+  }
+  if (pushTree.visible) {
+    LA.tip.getWorldPosition(tmp2);
+    pushTree.position.z += ((tmp2.z + 0.24) - pushTree.position.z) * 0.2;
+  }
+
+  tickTimer(realDt);
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+buildPlan();
+goTo(0, false);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
